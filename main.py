@@ -47,7 +47,7 @@ def check_margin_evaluation():
 
         headers = {
             "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BeautifulSoup/537.36"
                 " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
         }
@@ -79,14 +79,34 @@ def check_margin_evaluation():
             print(f"最新日付: {latest_date}")
             print(f"信用評価損益率: {latest_value}%")
 
-            target_condition_met = (latest_value <= THRES_DANGER) or (latest_value >= THRES_RECOVERY)
-            
-            # 月曜〜金曜日の定時実行判定
             today_wd = date.today().weekday()
-            is_report_day = today_wd in [0, 4]  # 月曜(0)・金曜(4)に定期報告
+            is_sunday = (today_wd == 6)  # 日曜日判定 (6)
 
-            if target_condition_met:
-                if latest_value <= THRES_DANGER:
+            # 警戒・回復アラート判定
+            is_danger = latest_value <= THRES_DANGER
+            is_recovery = latest_value >= THRES_RECOVERY
+
+            if is_sunday:
+                # 日曜日は定期通知日（閾値条件に関わらず必ず送信）
+                if is_danger:
+                    status_text = f"⚠️ 警戒ライン到達中（{THRES_DANGER}%以下）"
+                elif is_recovery:
+                    status_text = f"🎉 プラス圏（{THRES_RECOVERY}%以上）"
+                else:
+                    status_text = "🟢 正常範囲内"
+
+                msg = (
+                    f"📅 【週末定期報告：信用評価損益率】\n"
+                    f"日付: {latest_date}\n"
+                    f"評価損益率: {latest_value}%\n"
+                    f"状態: {status_text}\n\n"
+                    f"📊 過去の推移データはこちら:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                )
+                send_line_message(msg)
+
+            elif is_danger or is_recovery:
+                # 平日のアラート通知
+                if is_danger:
                     msg = (
                         f"⚠️ 【警戒警報：信用評価損益率】\n日付: {latest_date}\n"
                         f"評価損益率が {latest_value}% に低下しました！\n（設定閾値: {THRES_DANGER}% 以下）\n\n"
@@ -100,15 +120,8 @@ def check_margin_evaluation():
                     )
                 send_line_message(msg)
 
-            elif is_report_day:
-                msg = (
-                    f"📅 【定期報告：信用評価損益率】\n日付: {latest_date}\n"
-                    f"現在の評価損益率は {latest_value}% です。（正常範囲内）\n\n"
-                    f"📊 過去の推移データはこちら:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
-                )
-                send_line_message(msg)
             else:
-                print("🟢 現在は正常範囲内のため、LINE通知はスキップします。")
+                print("🟢 平日かつ正常範囲内のため、LINE通知はスキップします。")
         else:
             print("❌ 信用評価損益率の取得に失敗しました。")
         print("-" * 30)
