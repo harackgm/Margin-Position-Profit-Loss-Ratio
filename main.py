@@ -40,7 +40,7 @@ def send_line_message(text):
         print(f"❌ LINE送信エラー: {e}")
 
 # ==========================================
-# 3. 恐怖と貪欲指数 (Fear & Greed Index) データ取得＆演出処理
+# 3. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
     """CNNのAPIからダイレクトにスコアを取得し、演出メッセージをLINE送信する関数"""
@@ -107,8 +107,9 @@ def check_and_send_fear_greed():
         title = "🤩🔥 【超イケイケ激熱発狂モード！！ (Extreme Greed)】 🔥🤩"
         expression = "市場は熱狂の渦！絶好調のイケイケ状態です！！\n過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
 
-    # メッセージの組み立て（基準の解説を追加）
+    # メッセージの組み立て（冒頭にタイトルを追加）
     msg = (
+        f"🧭 Fear & Greed Index（恐怖と欲望指数）\n\n"
         f"{title}\n"
         f"━━━━━━━━━━━━━━━\n"
         f"📊 現在のスコア: 【 {score} / 100 】\n"
@@ -315,7 +316,7 @@ def main():
     now_hour = datetime.now().hour
     print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
 
-    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
+    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と欲望指数（週末定期報告）
     if today_wd == 6:
         print("📅 【日曜日】週末定期報告を行います。")
         check_margin_evaluation()
@@ -327,9 +328,9 @@ def main():
         print("☀️ 【平日朝の部】信用評価損益率アラートチェックを行います。")
         check_margin_evaluation()
 
-    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と貪欲指数（ナイトセッション用）
+    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と欲望指数（ナイトセッション用）
     else:
-        print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と貪欲指数（Fear & Greed）のチェックを行います。")
+        print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と欲望指数のチェックを行います。")
         check_gaikaex_economy_index()
         print("---")
         check_and_send_fear_greed()
