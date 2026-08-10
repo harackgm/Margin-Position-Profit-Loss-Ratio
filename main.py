@@ -71,7 +71,7 @@ def send_line_image(image_url):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print("📸 LINEへの画像送信に成功しました！")
+            print(f"📸 LINEへの画像送信成功: {image_url}")
         else:
             print(f"❌ LINE画像通知失敗: {res.status_code} - {res.text}")
     except Exception as e:
@@ -92,7 +92,7 @@ def capture_and_send_fear_greed():
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1024,1024')
+    options.add_argument('--window-size=1200,800')
     
     driver = None
     image_path = "fgi_meter.png"
@@ -118,7 +118,7 @@ def capture_and_send_fear_greed():
         if driver:
             driver.quit()
 
-    # --- ImgBBへ画像をアップロードして直リンクURL化 ---
+    # --- ImgBBへ画像をアップロードして完全な画像直リンク化 ---
     print("☁️ 取得した画像をImgBBへアップロードしています...")
     try:
         with open(image_path, "rb") as file:
@@ -133,13 +133,14 @@ def capture_and_send_fear_greed():
         res_json = res.json()
 
         if res.status_code == 200 and res_json.get("success"):
-            # LINEが確実に表示できる画像ファイルの直リンク（display_url / url_viewerなし）を取得
             data_field = res_json.get("data", {})
+            
+            # LINEが確実に表示できる画像ファイルの直リンク（display_url / image.url）を特定
             image_url = data_field.get("display_url") or data_field.get("image", {}).get("url")
             
-            print(f"✅ 画像直リンクの取得に成功しました: {image_url}")
+            print(f"✅ 画像直リンクの取得成功: {image_url}")
             
-            send_line_message("🧭 【現在の恐怖と貪欲指数 (Fear & Greed Index)】\n市場の過熱感をお知らせします。")
+            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
             send_line_image(image_url)
         else:
             print(f"❌ ImgBBへのアップロード失敗: {res_json}")
@@ -329,33 +330,11 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（正式スケジュール運用モード）
+# 6. メイン処理（★テスト強制実行モード★）
 # ==========================================
 def main():
-    today_wd = date.today().weekday()
-    now_hour = datetime.now().hour
-    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
-
-    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
-    if today_wd == 6:
-        print("📅 【日曜日】週末定期報告を行います。")
-        check_margin_evaluation()
-        print("---")
-        capture_and_send_fear_greed()
-
-    # 平日（月〜金）の朝（12時前） ＝ 信用評価損益率 ＆ 恐怖と貪欲指数
-    elif now_hour < 12:
-        print("☀️ 【平日朝の部】アラートチェックを行います。")
-        check_margin_evaluation()
-        print("---")
-        capture_and_send_fear_greed()
-
-    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標チェック
-    else:
-        print("🌙 【平日夜の部】米国重要指標（GMO★★★）のチェックを行います。")
-        check_gaikaex_economy_index()
-
-    print("🏁 すべての処理が完了しました。")
+    print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
+    capture_and_send_fear_greed()
 
 if __name__ == "__main__":
     main()
