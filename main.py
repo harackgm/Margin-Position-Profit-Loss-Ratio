@@ -57,8 +57,6 @@ def send_line_image(image_url):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
-    
-    # LINE Bot用の画像メッセージペイロード
     payload = {
         "to": LINE_USER_ID,
         "messages": [
@@ -73,7 +71,7 @@ def send_line_image(image_url):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print(f"📸 LINEへの画像送信APIリクエスト成功！ 送信URL: {image_url}")
+            print(f"📸 LINEへの画像送信API呼び出し成功！ 送信URL: {image_url}")
         else:
             print(f"❌ LINE画像通知失敗: {res.status_code} - {res.text}")
     except Exception as e:
@@ -94,7 +92,7 @@ def capture_and_send_fear_greed():
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1200,800')
+    options.add_argument('--window-size=1200,900')
     
     driver = None
     image_path = "fgi_meter.png"
@@ -103,15 +101,12 @@ def capture_and_send_fear_greed():
         driver = webdriver.Chrome(options=options)
         driver.get("https://edition.cnn.com/markets/fear-and-greed")
         
-        time.sleep(5) 
+        # アニメーションと描画の完全完了をしっかり待つ
+        time.sleep(7) 
 
-        try:
-            gauge_element = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge")
-            gauge_element.screenshot(image_path)
-            print("📸 メーター部分の切り取り撮影に成功しました。")
-        except:
-            driver.save_screenshot(image_path)
-            print("📸 画面全体の撮影に成功しました。")
+        # 確実に画角に収まる画面キャプチャを取得
+        driver.save_screenshot(image_path)
+        print("📸 画面キャプチャの保存に成功しました。")
             
     except Exception as e:
         print(f"❌ 画像キャプチャ中にエラーが発生しました: {e}")
@@ -120,7 +115,7 @@ def capture_and_send_fear_greed():
         if driver:
             driver.quit()
 
-    # --- ImgBBへ画像をアップロードして直接リンクを取得 ---
+    # --- ImgBBへ画像をアップロードして直リンク取得 ---
     print("☁️ 取得した画像をImgBBへアップロードしています...")
     try:
         with open(image_path, "rb") as file:
@@ -137,18 +132,10 @@ def capture_and_send_fear_greed():
         if res.status_code == 200 and res_json.get("success"):
             data_field = res_json.get("data", {})
             
-            # 優先度順に純粋な画像直リンクを探す
-            # 1. data.image.url (一番確実な拡張子つき直リンク)
-            # 2. data.display_url
-            # 3. data.url
-            image_url = (
-                data_field.get("image", {}).get("url") or 
-                data_field.get("display_url") or 
-                data_field.get("url")
-            )
+            # LINEが間違いなくプレビュー描画できる完全直リンクを取得
+            image_url = data_field.get("url") or data_field.get("display_url")
             
-            print(f"🔗 ImgBBレスポンス解析成功:")
-            print(f"   - 採用URL: {image_url}")
+            print(f"✅ 画像直リンク取得成功: {image_url}")
             
             send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
             send_line_image(image_url)
@@ -340,7 +327,7 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（★テストモード★）
+# 6. メイン処理（テスト実行モード）
 # ==========================================
 def main():
     print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
