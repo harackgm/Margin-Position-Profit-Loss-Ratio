@@ -27,11 +27,12 @@ jobs:
 
       - name: 必要なライブラリのインストール
         run: |
-          pip install requests beautifulsoup4
+          pip install requests beautifulsoup4 selenium
 
       - name: プログラムを実行
         env:
           LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           TZ: 'Asia/Tokyo'  # 時間帯を日本時間に固定
         run: python main.py
