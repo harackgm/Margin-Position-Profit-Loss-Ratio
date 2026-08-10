@@ -5,11 +5,6 @@ from datetime import datetime, date, timedelta
 import requests
 from bs4 import BeautifulSoup
 
-# Selenium関連のインポート（テキストデータ取得用）
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-
 # ==========================================
 # 1. 設定情報（GitHub Secretsから安全に読み込み）
 # ==========================================
@@ -45,53 +40,59 @@ def send_line_message(text):
         print(f"❌ LINE送信エラー: {e}")
 
 # ==========================================
-# 3. 恐怖と貪欲指数 (Fear & Greed Index) テキスト＆演出処理
+# 3. 恐怖と貪欲指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
-    """CNNのサイトからスコアを取得し、状況に応じた演出メッセージをLINE送信する関数"""
-    print("🌐 CNN Fear & Greed Indexにアクセスし、数値を取得します...")
+    """CNNのAPIからダイレクトにスコアを取得し、演出メッセージをLINE送信する関数"""
+    print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
     
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
+    # CNNのデータ取得用APIエンドポイント
+    api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
     
-    driver = None
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
     score = None
     rating = ""
 
     try:
-        driver = webdriver.Chrome(options=options)
-        driver.get("https://edition.cnn.com/markets/fear-and-greed")
-        time.sleep(5) # データの読み込み待ち
-
-        # スコア数字と状態テキストの取得
-        try:
-            score_elem = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge__dial-number-value")
-            rating_elem = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge__dial-number-description")
+        res = requests.get(api_url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            fng_data = data.get("fear_and_greed", {})
             
-            score = int(float(score_elem.text.strip()))
-            rating = rating_elem.text.strip()
-            print(f"✅ 取得成功: スコア = {score}, 状態 = {rating}")
-        except Exception as e:
-            print(f"⚠️ 要素の特定に失敗したため、ページ全体から検索します: {e}")
-            # フォールバック処理（テキスト検索）
-            page_text = driver.find_element(By.TAG_NAME, "body").text
-            match = re.search(r"(\d{1,3})\s*\n?\s*(Extreme Fear|Fear|Neutral|Greed|Extreme Greed)", page_text, re.I)
-            if match:
-                score = int(match.group(1))
-                rating = match.group(2)
-                print(f"✅ テキスト検索で取得成功: スコア = {score}, 状態 = {rating}")
-
+            score = int(round(fng_data.get("score", 0)))
+            rating = fng_data.get("rating", "Neutral")
+            print(f"✅ API取得成功！ スコア = {score}, 状態 = {rating}")
+        else:
+            print(f"⚠️ APIレスポンスエラー: ステータスコード {res.status_code}")
+            
     except Exception as e:
-        print(f"❌ CNNへのアクセス中にエラーが発生しました: {e}")
-        return
-    finally:
-        if driver:
-            driver.quit()
+        print(f"❌ API通信中にエラーが発生しました: {e}")
+
+    # 万が一APIが拒否された場合のWebスクレイピング（予備）
+    if score is None:
+        print("🔄 予備手段：Webページから数値を探索します...")
+        try:
+            web_url = "https://edition.cnn.com/markets/fear-and-greed"
+            res = requests.get(web_url, headers=headers, timeout=15)
+            soup = BeautifulSoup(res.text, "html.parser")
+            
+            # ページ内のJSONデータを探索
+            match = re.search(r'"score":\s*([\d\.]+)', res.text)
+            if match:
+                score = int(round(float(match.group(1))))
+                rating = "Neutral" # デフォルト
+                print(f"✅ 予備取得成功！ スコア = {score}")
+        except Exception as e:
+            print(f"❌ 予備取得も失敗しました: {e}")
 
     if score is None:
-        print("❌ スコアの取得に失敗したため、送信をスキップします。")
+        print("❌ スコアを取得できませんでした。")
         return
 
     # --- 数値に応じた感情・演出メッセージの作成 ---
