@@ -107,7 +107,7 @@ def check_and_send_fear_greed():
         title = "🤩🔥 【超イケイケ激熱発狂モード！！ (Extreme Greed)】 🔥🤩"
         expression = "市場は熱狂の渦！絶好調のイケイケ状態です！！\n過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
 
-    # メッセージの組み立て
+    # メッセージの組み立て（基準の解説を追加）
     msg = (
         f"{title}\n"
         f"━━━━━━━━━━━━━━━\n"
@@ -115,7 +115,13 @@ def check_and_send_fear_greed():
         f"📝 判定: {rating.upper()}\n"
         f"━━━━━━━━━━━━━━━\n\n"
         f"{expression}\n\n"
-        f"🔗 詳細チャート:\nhttps://edition.cnn.com/markets/fear-and-greed"
+        f"🔗 詳細チャート:\nhttps://edition.cnn.com/markets/fear-and-greed\n\n"
+        f"💡 【スコアの目安】\n"
+        f"  0〜24：極度の恐怖 (Extreme Fear)\n"
+        f" 25〜44：恐怖 (Fear)\n"
+        f" 45〜55：中立・平穏 (Neutral)\n"
+        f" 56〜75：強気モード (Greed)\n"
+        f" 76〜100：超イケイケ (Extreme Greed)"
     )
 
     send_line_message(msg)
