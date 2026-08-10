@@ -1,22 +1,31 @@
 import os
 import re
+import time
+import base64
 from datetime import datetime, date, timedelta
 import requests
 from bs4 import BeautifulSoup
+
+# Selenium関連のインポート（画像キャプチャ用）
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 # ==========================================
 # 1. 設定情報（GitHub Secretsから安全に読み込み）
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
+IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY")  # 新規追加：ImgBBのAPIキー
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
 
 # ==========================================
-# 2. LINE Push Message 送信関数
+# 2. LINE Push Message 送信関数（テキスト用＆画像用）
 # ==========================================
 def send_line_message(text):
+    """テキストメッセージを送信する関数"""
     if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
         print("❌ LINEのトークンまたはユーザーIDが設定されていません。")
         return
@@ -31,14 +40,120 @@ def send_line_message(text):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print("🚀 LINEへの通知送信に成功しました！")
+            print("🚀 LINEへのテキスト通知送信に成功しました！")
         else:
             print(f"❌ LINE通知失敗: {res.status_code} - {res.text}")
     except Exception as e:
         print(f"❌ LINE送信エラー: {e}")
 
+
+def send_line_image(image_url):
+    """画像メッセージを送信する関数"""
+    if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
+        return
+
+    url = "https://api.line.me/v2/bot/message/push"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
+    }
+    # LINEで画像を送るための専用データ構造
+    payload = {
+        "to": LINE_USER_ID,
+        "messages": [
+            {
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url
+            }
+        ]
+    }
+
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=10)
+        if res.status_code == 200:
+            print("📸 LINEへの画像送信に成功しました！")
+        else:
+            print(f"❌ LINE画像通知失敗: {res.status_code} - {res.text}")
+    except Exception as e:
+        print(f"❌ LINE画像送信エラー: {e}")
+
 # ==========================================
-# 3. トレーダーズ・ウェブ（信用評価損益率）処理
+# 3. 恐怖と貪欲指数 (Fear & Greed Index) 画像処理
+# ==========================================
+def capture_and_send_fear_greed():
+    """CNNのサイトからメーターを撮影し、ImgBB経由でLINEへ送る関数"""
+    if not IMGBB_API_KEY:
+        print("❌ IMGBB_API_KEYが設定されていないため、画像処理をスキップします。")
+        return
+
+    print("🌐 CNN Fear & Greed Indexにアクセスし、画像をキャプチャします...")
+    
+    # GitHub Actions等のクラウド環境でChromeを動かすための設定
+    options = Options()
+    options.add_argument('--headless')  # 画面を表示しない
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1024,1024')
+    
+    driver = None
+    image_path = "fgi_meter.png"
+
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.get("https://edition.cnn.com/markets/fear-and-greed")
+        
+        # サイトのメーターがアニメーションで描画されるのを待つ
+        time.sleep(5) 
+
+        # メーター部分の要素を狙ってスクリーンショット
+        try:
+            # CNNのメーター部分のクラス名を指定
+            gauge_element = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge")
+            gauge_element.screenshot(image_path)
+            print("📸 メーター部分の切り取り撮影に成功しました。")
+        except:
+            # 特定の要素が見つからない場合は画面全体を撮影（フェイルセーフ）
+            driver.save_screenshot(image_path)
+            print("📸 画面全体の撮影に成功しました。")
+            
+    except Exception as e:
+        print(f"❌ 画像キャプチャ中にエラーが発生しました: {e}")
+        return
+    finally:
+        if driver:
+            driver.quit()
+
+    # --- ImgBBへ画像をアップロードしてURL化 ---
+    print("☁️ 取得した画像をImgBBへアップロードしています...")
+    try:
+        with open(image_path, "rb") as file:
+            img_base64 = base64.b64encode(file.read())
+
+        imgbb_url = "https://api.imgbb.com/1/upload"
+        payload = {
+            "key": IMGBB_API_KEY,
+            "image": img_base64,
+        }
+        res = requests.post(imgbb_url, data=payload, timeout=15)
+        res_json = res.json()
+
+        if res.status_code == 200 and res_json.get("success"):
+            image_url = res_json["data"]["url"]
+            print(f"✅ 画像のURL化に成功しました: {image_url}")
+            
+            # 案内テキストと画像をセットでLINEに送信
+            send_line_message("🧭 【現在の恐怖と貪欲指数 (Fear & Greed Index)】\n市場の過熱感をお知らせします。")
+            send_line_image(image_url)
+        else:
+            print(f"❌ ImgBBへのアップロード失敗: {res_json}")
+            
+    except Exception as e:
+        print(f"❌ ImgBBアップロード処理中にエラーが発生しました: {e}")
+
+
+# ==========================================
+# 4. トレーダーズ・ウェブ（信用評価損益率）処理
 # ==========================================
 def check_margin_evaluation():
     try:
@@ -47,7 +162,7 @@ def check_margin_evaluation():
 
         headers = {
             "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BeautifulSoup/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
         }
@@ -87,7 +202,7 @@ def check_margin_evaluation():
             is_recovery = latest_value >= THRES_RECOVERY
 
             if is_sunday:
-                # 日曜日は定期通知日（夜20:00の実行時に送信）
+                # 日曜日は定期通知日
                 if is_danger:
                     status_text = f"⚠️ 警戒ライン到達中（{THRES_DANGER}%以下）"
                 elif is_recovery:
@@ -100,7 +215,7 @@ def check_margin_evaluation():
                     f"日付: {latest_date}\n"
                     f"評価損益率: {latest_value}%\n"
                     f"状態: {status_text}\n\n"
-                    f"📊 過去の推移データはこちら:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                    f"📊 過去の推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                 )
                 send_line_message(msg)
 
@@ -110,13 +225,13 @@ def check_margin_evaluation():
                     msg = (
                         f"⚠️ 【警戒警報：信用評価損益率】\n日付: {latest_date}\n"
                         f"評価損益率が {latest_value}% に低下しました！\n（設定閾値: {THRES_DANGER}% 以下）\n\n"
-                        f"📊 過去の推移データはこちら:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                        f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                     )
                 else:
                     msg = (
                         f"🎉 【プラス圏浮上：信用評価損益率】\n日付: {latest_date}\n"
                         f"評価損益率が {latest_value}% に回復しました！\n\n"
-                        f"📊 過去の推移データはこちら:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                        f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                     )
                 send_line_message(msg)
 
@@ -130,7 +245,7 @@ def check_margin_evaluation():
         print(f"❌ トレーダーズ・ウェブ処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 4. 外貨ex by GMO（米国・重要度★★★指標）処理
+# 5. 外貨ex by GMO（米国・重要度★★★指標）処理
 # ==========================================
 def check_gaikaex_economy_index():
     print("🌐 外貨ex by GMO 経済指標カレンダーにアクセスしています...")
@@ -138,7 +253,7 @@ def check_gaikaex_economy_index():
 
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BeautifulSoup/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
     }
@@ -222,21 +337,27 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 5. メイン処理
+# 6. メイン処理
 # ==========================================
 def main():
     today_wd = date.today().weekday()
     now_hour = datetime.now().hour
     print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
 
-    # 日曜日の場合 ＝ 信用評価損益率（週末定期報告）を実行
+    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
     if today_wd == 6:
-        print("📅 【日曜日】信用評価損益率の週末定期報告を行います。")
+        print("📅 【日曜日】週末定期報告を行います。")
         check_margin_evaluation()
-    # 平日（月〜金）の朝（12時前） ＝ 信用評価損益率のアラートチェック
+        print("---")
+        capture_and_send_fear_greed() # 新規追加：日曜日にもメーター画像を送信
+
+    # 平日（月〜金）の朝（12時前） ＝ 信用評価損益率 ＆ 恐怖と貪欲指数
     elif now_hour < 12:
-        print("☀️ 【平日朝の部】信用評価損益率のアラートチェックを行います。")
+        print("☀️ 【平日朝の部】アラートチェックを行います。")
         check_margin_evaluation()
+        print("---")
+        capture_and_send_fear_greed() # 新規追加：平日の朝にもメーター画像を送信
+
     # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標チェック
     else:
         print("🌙 【平日夜の部】米国重要指標（GMO★★★）のチェックを行います。")
