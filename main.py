@@ -57,6 +57,8 @@ def send_line_image(image_url):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
+    
+    # LINE Bot用の画像メッセージペイロード
     payload = {
         "to": LINE_USER_ID,
         "messages": [
@@ -71,7 +73,7 @@ def send_line_image(image_url):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print(f"📸 LINEへの画像送信成功: {image_url}")
+            print(f"📸 LINEへの画像送信APIリクエスト成功！ 送信URL: {image_url}")
         else:
             print(f"❌ LINE画像通知失敗: {res.status_code} - {res.text}")
     except Exception as e:
@@ -118,7 +120,7 @@ def capture_and_send_fear_greed():
         if driver:
             driver.quit()
 
-    # --- ImgBBへ画像をアップロードして完全な画像直リンク化 ---
+    # --- ImgBBへ画像をアップロードして直接リンクを取得 ---
     print("☁️ 取得した画像をImgBBへアップロードしています...")
     try:
         with open(image_path, "rb") as file:
@@ -135,10 +137,18 @@ def capture_and_send_fear_greed():
         if res.status_code == 200 and res_json.get("success"):
             data_field = res_json.get("data", {})
             
-            # LINEが確実に表示できる画像ファイルの直リンク（display_url / image.url）を特定
-            image_url = data_field.get("display_url") or data_field.get("image", {}).get("url")
+            # 優先度順に純粋な画像直リンクを探す
+            # 1. data.image.url (一番確実な拡張子つき直リンク)
+            # 2. data.display_url
+            # 3. data.url
+            image_url = (
+                data_field.get("image", {}).get("url") or 
+                data_field.get("display_url") or 
+                data_field.get("url")
+            )
             
-            print(f"✅ 画像直リンクの取得成功: {image_url}")
+            print(f"🔗 ImgBBレスポンス解析成功:")
+            print(f"   - 採用URL: {image_url}")
             
             send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
             send_line_image(image_url)
@@ -330,7 +340,7 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（★テスト強制実行モード★）
+# 6. メイン処理（★テストモード★）
 # ==========================================
 def main():
     print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
