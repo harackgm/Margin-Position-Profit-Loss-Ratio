@@ -118,7 +118,7 @@ def capture_and_send_fear_greed():
         if driver:
             driver.quit()
 
-    # --- ImgBBへ画像をアップロードしてURL化 ---
+    # --- ImgBBへ画像をアップロードして直リンクURL化 ---
     print("☁️ 取得した画像をImgBBへアップロードしています...")
     try:
         with open(image_path, "rb") as file:
@@ -133,10 +133,13 @@ def capture_and_send_fear_greed():
         res_json = res.json()
 
         if res.status_code == 200 and res_json.get("success"):
-            image_url = res_json["data"]["url"]
-            print(f"✅ 画像のURL化に成功しました: {image_url}")
+            # ★修正ポイント：LINEが表示できる「直リンク（image.url）」を優先取得
+            data_field = res_json.get("data", {})
+            image_url = data_field.get("image", {}).get("url") or data_field.get("url")
             
-            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の送信テストです！")
+            print(f"✅ 画像直リンクの取得に成功しました: {image_url}")
+            
+            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
             send_line_image(image_url)
         else:
             print(f"❌ ImgBBへのアップロード失敗: {res_json}")
@@ -326,7 +329,7 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（※テスト用に強制実行するモードにしています）
+# 6. メイン処理（※テスト実行モード）
 # ==========================================
 def main():
     print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
