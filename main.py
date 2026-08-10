@@ -133,13 +133,13 @@ def capture_and_send_fear_greed():
         res_json = res.json()
 
         if res.status_code == 200 and res_json.get("success"):
-            # ★修正ポイント：LINEが表示できる「直リンク（image.url）」を優先取得
+            # LINEが確実に表示できる画像ファイルの直リンク（display_url / url_viewerなし）を取得
             data_field = res_json.get("data", {})
-            image_url = data_field.get("image", {}).get("url") or data_field.get("url")
+            image_url = data_field.get("display_url") or data_field.get("image", {}).get("url")
             
             print(f"✅ 画像直リンクの取得に成功しました: {image_url}")
             
-            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
+            send_line_message("🧭 【現在の恐怖と貪欲指数 (Fear & Greed Index)】\n市場の過熱感をお知らせします。")
             send_line_image(image_url)
         else:
             print(f"❌ ImgBBへのアップロード失敗: {res_json}")
@@ -329,11 +329,33 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（※テスト実行モード）
+# 6. メイン処理（正式スケジュール運用モード）
 # ==========================================
 def main():
-    print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
-    capture_and_send_fear_greed()
+    today_wd = date.today().weekday()
+    now_hour = datetime.now().hour
+    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
+
+    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
+    if today_wd == 6:
+        print("📅 【日曜日】週末定期報告を行います。")
+        check_margin_evaluation()
+        print("---")
+        capture_and_send_fear_greed()
+
+    # 平日（月〜金）の朝（12時前） ＝ 信用評価損益率 ＆ 恐怖と貪欲指数
+    elif now_hour < 12:
+        print("☀️ 【平日朝の部】アラートチェックを行います。")
+        check_margin_evaluation()
+        print("---")
+        capture_and_send_fear_greed()
+
+    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標チェック
+    else:
+        print("🌙 【平日夜の部】米国重要指標（GMO★★★）のチェックを行います。")
+        check_gaikaex_economy_index()
+
+    print("🏁 すべての処理が完了しました。")
 
 if __name__ == "__main__":
     main()
