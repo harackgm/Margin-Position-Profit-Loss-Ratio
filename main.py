@@ -16,7 +16,7 @@ from selenium.webdriver.common.by import By
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
-IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY")  # 新規追加：ImgBBのAPIキー
+IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY")
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -57,7 +57,6 @@ def send_line_image(image_url):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
-    # LINEで画像を送るための専用データ構造
     payload = {
         "to": LINE_USER_ID,
         "messages": [
@@ -89,9 +88,8 @@ def capture_and_send_fear_greed():
 
     print("🌐 CNN Fear & Greed Indexにアクセスし、画像をキャプチャします...")
     
-    # GitHub Actions等のクラウド環境でChromeを動かすための設定
     options = Options()
-    options.add_argument('--headless')  # 画面を表示しない
+    options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1024,1024')
@@ -103,17 +101,13 @@ def capture_and_send_fear_greed():
         driver = webdriver.Chrome(options=options)
         driver.get("https://edition.cnn.com/markets/fear-and-greed")
         
-        # サイトのメーターがアニメーションで描画されるのを待つ
         time.sleep(5) 
 
-        # メーター部分の要素を狙ってスクリーンショット
         try:
-            # CNNのメーター部分のクラス名を指定
             gauge_element = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge")
             gauge_element.screenshot(image_path)
             print("📸 メーター部分の切り取り撮影に成功しました。")
         except:
-            # 特定の要素が見つからない場合は画面全体を撮影（フェイルセーフ）
             driver.save_screenshot(image_path)
             print("📸 画面全体の撮影に成功しました。")
             
@@ -142,15 +136,13 @@ def capture_and_send_fear_greed():
             image_url = res_json["data"]["url"]
             print(f"✅ 画像のURL化に成功しました: {image_url}")
             
-            # 案内テキストと画像をセットでLINEに送信
-            send_line_message("🧭 【現在の恐怖と貪欲指数 (Fear & Greed Index)】\n市場の過熱感をお知らせします。")
+            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の送信テストです！")
             send_line_image(image_url)
         else:
             print(f"❌ ImgBBへのアップロード失敗: {res_json}")
             
     except Exception as e:
         print(f"❌ ImgBBアップロード処理中にエラーが発生しました: {e}")
-
 
 # ==========================================
 # 4. トレーダーズ・ウェブ（信用評価損益率）処理
@@ -195,14 +187,12 @@ def check_margin_evaluation():
             print(f"信用評価損益率: {latest_value}%")
 
             today_wd = date.today().weekday()
-            is_sunday = (today_wd == 6)  # 日曜日判定 (6)
+            is_sunday = (today_wd == 6)
 
-            # 警戒・回復アラート判定
             is_danger = latest_value <= THRES_DANGER
             is_recovery = latest_value >= THRES_RECOVERY
 
             if is_sunday:
-                # 日曜日は定期通知日
                 if is_danger:
                     status_text = f"⚠️ 警戒ライン到達中（{THRES_DANGER}%以下）"
                 elif is_recovery:
@@ -220,7 +210,6 @@ def check_margin_evaluation():
                 send_line_message(msg)
 
             elif is_danger or is_recovery:
-                # 平日のアラート通知
                 if is_danger:
                     msg = (
                         f"⚠️ 【警戒警報：信用評価損益率】\n日付: {latest_date}\n"
@@ -337,33 +326,11 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理
+# 6. メイン処理（※テスト用に強制実行するモードにしています）
 # ==========================================
 def main():
-    today_wd = date.today().weekday()
-    now_hour = datetime.now().hour
-    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
-
-    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
-    if today_wd == 6:
-        print("📅 【日曜日】週末定期報告を行います。")
-        check_margin_evaluation()
-        print("---")
-        capture_and_send_fear_greed() # 新規追加：日曜日にもメーター画像を送信
-
-    # 平日（月〜金）の朝（12時前） ＝ 信用評価損益率 ＆ 恐怖と貪欲指数
-    elif now_hour < 12:
-        print("☀️ 【平日朝の部】アラートチェックを行います。")
-        check_margin_evaluation()
-        print("---")
-        capture_and_send_fear_greed() # 新規追加：平日の朝にもメーター画像を送信
-
-    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標チェック
-    else:
-        print("🌙 【平日夜の部】米国重要指標（GMO★★★）のチェックを行います。")
-        check_gaikaex_economy_index()
-
-    print("🏁 すべての処理が完了しました。")
+    print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
+    capture_and_send_fear_greed()
 
 if __name__ == "__main__":
     main()
