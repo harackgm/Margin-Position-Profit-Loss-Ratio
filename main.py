@@ -46,9 +46,7 @@ def check_and_send_fear_greed():
     """CNNのAPIからダイレクトにスコアを取得し、演出メッセージをLINE送信する関数"""
     print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
     
-    # CNNのデータ取得用APIエンドポイント
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-    
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -80,13 +78,10 @@ def check_and_send_fear_greed():
         try:
             web_url = "https://edition.cnn.com/markets/fear-and-greed"
             res = requests.get(web_url, headers=headers, timeout=15)
-            soup = BeautifulSoup(res.text, "html.parser")
-            
-            # ページ内のJSONデータを探索
             match = re.search(r'"score":\s*([\d\.]+)', res.text)
             if match:
                 score = int(round(float(match.group(1))))
-                rating = "Neutral" # デフォルト
+                rating = "Neutral"
                 print(f"✅ 予備取得成功！ スコア = {score}")
         except Exception as e:
             print(f"❌ 予備取得も失敗しました: {e}")
@@ -106,7 +101,7 @@ def check_and_send_fear_greed():
         title = "😐⚖️ 【中立・平穏 (Neutral)】 ⚖️😐"
         expression = "市場はきわめて冷静です。\n嵐の前の静けさか、方向感を探る展開が続いています。"
     elif score <= 75:
-        title = "😃🚀 【イケイケ強気モード！ (Greed)】 🚀😃"
+        title = "🤪🚀 【イケイケ強気モード！ (Greed)】 🚀🤪"
         expression = "市場はイケイケムード上昇中！！\n買いの勢いがついています。この波に乗っていきましょう！"
     else:
         title = "🤩🔥 【超イケイケ激熱モード！！ (Extreme Greed)】 🔥🤩"
@@ -307,11 +302,33 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（★テストモード：今すぐテキスト演出送信★）
+# 6. メイン処理（★改訂版スケジュールモード★）
 # ==========================================
 def main():
-    print("🧪 【テスト実行】恐怖と貪欲指数の数値＆演出メッセージを送信します！")
-    check_and_send_fear_greed()
+    today_wd = date.today().weekday()
+    now_hour = datetime.now().hour
+    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
+
+    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と貪欲指数（週末定期報告）
+    if today_wd == 6:
+        print("📅 【日曜日】週末定期報告を行います。")
+        check_margin_evaluation()
+        print("---")
+        check_and_send_fear_greed()
+
+    # 平日（月〜金）の朝（12時前） ＝ 日本株の信用評価損益率チェックのみ
+    elif now_hour < 12:
+        print("☀️ 【平日朝の部】信用評価損益率アラートチェックを行います。")
+        check_margin_evaluation()
+
+    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と貪欲指数（ナイトセッション用）
+    else:
+        print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と貪欲指数（Fear & Greed）のチェックを行います。")
+        check_gaikaex_economy_index()
+        print("---")
+        check_and_send_fear_greed()
+
+    print("🏁 すべての処理が完了しました。")
 
 if __name__ == "__main__":
     main()
