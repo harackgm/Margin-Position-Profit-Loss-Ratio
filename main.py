@@ -1,12 +1,11 @@
 import os
 import re
 import time
-import base64
 from datetime import datetime, date, timedelta
 import requests
 from bs4 import BeautifulSoup
 
-# Selenium関連のインポート（画像キャプチャ用）
+# Selenium関連のインポート（テキストデータ取得用）
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -16,13 +15,12 @@ from selenium.webdriver.common.by import By
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
-IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY")
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
 
 # ==========================================
-# 2. LINE Push Message 送信関数（テキスト用＆画像用）
+# 2. LINE Push Message 送信関数
 # ==========================================
 def send_line_message(text):
     """テキストメッセージを送信する関数"""
@@ -46,104 +44,85 @@ def send_line_message(text):
     except Exception as e:
         print(f"❌ LINE送信エラー: {e}")
 
-
-def send_line_image(image_url):
-    """画像メッセージを送信する関数"""
-    if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
-        return
-
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
-    }
-    payload = {
-        "to": LINE_USER_ID,
-        "messages": [
-            {
-                "type": "image",
-                "originalContentUrl": image_url,
-                "previewImageUrl": image_url
-            }
-        ]
-    }
-
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=10)
-        if res.status_code == 200:
-            print(f"📸 LINEへの画像送信API呼び出し成功！ 送信URL: {image_url}")
-        else:
-            print(f"❌ LINE画像通知失敗: {res.status_code} - {res.text}")
-    except Exception as e:
-        print(f"❌ LINE画像送信エラー: {e}")
-
 # ==========================================
-# 3. 恐怖と貪欲指数 (Fear & Greed Index) 画像処理
+# 3. 恐怖と貪欲指数 (Fear & Greed Index) テキスト＆演出処理
 # ==========================================
-def capture_and_send_fear_greed():
-    """CNNのサイトからメーターを撮影し、ImgBB経由でLINEへ送る関数"""
-    if not IMGBB_API_KEY:
-        print("❌ IMGBB_API_KEYが設定されていないため、画像処理をスキップします。")
-        return
-
-    print("🌐 CNN Fear & Greed Indexにアクセスし、画像をキャプチャします...")
+def check_and_send_fear_greed():
+    """CNNのサイトからスコアを取得し、状況に応じた演出メッセージをLINE送信する関数"""
+    print("🌐 CNN Fear & Greed Indexにアクセスし、数値を取得します...")
     
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1200,900')
     
     driver = None
-    image_path = "fgi_meter.png"
+    score = None
+    rating = ""
 
     try:
         driver = webdriver.Chrome(options=options)
         driver.get("https://edition.cnn.com/markets/fear-and-greed")
-        
-        # アニメーションと描画の完全完了をしっかり待つ
-        time.sleep(7) 
+        time.sleep(5) # データの読み込み待ち
 
-        # 確実に画角に収まる画面キャプチャを取得
-        driver.save_screenshot(image_path)
-        print("📸 画面キャプチャの保存に成功しました。")
+        # スコア数字と状態テキストの取得
+        try:
+            score_elem = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge__dial-number-value")
+            rating_elem = driver.find_element(By.CSS_SELECTOR, ".market-fng-gauge__dial-number-description")
             
+            score = int(float(score_elem.text.strip()))
+            rating = rating_elem.text.strip()
+            print(f"✅ 取得成功: スコア = {score}, 状態 = {rating}")
+        except Exception as e:
+            print(f"⚠️ 要素の特定に失敗したため、ページ全体から検索します: {e}")
+            # フォールバック処理（テキスト検索）
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            match = re.search(r"(\d{1,3})\s*\n?\s*(Extreme Fear|Fear|Neutral|Greed|Extreme Greed)", page_text, re.I)
+            if match:
+                score = int(match.group(1))
+                rating = match.group(2)
+                print(f"✅ テキスト検索で取得成功: スコア = {score}, 状態 = {rating}")
+
     except Exception as e:
-        print(f"❌ 画像キャプチャ中にエラーが発生しました: {e}")
+        print(f"❌ CNNへのアクセス中にエラーが発生しました: {e}")
         return
     finally:
         if driver:
             driver.quit()
 
-    # --- ImgBBへ画像をアップロードして直リンク取得 ---
-    print("☁️ 取得した画像をImgBBへアップロードしています...")
-    try:
-        with open(image_path, "rb") as file:
-            img_base64 = base64.b64encode(file.read())
+    if score is None:
+        print("❌ スコアの取得に失敗したため、送信をスキップします。")
+        return
 
-        imgbb_url = "https://api.imgbb.com/1/upload"
-        payload = {
-            "key": IMGBB_API_KEY,
-            "image": img_base64,
-        }
-        res = requests.post(imgbb_url, data=payload, timeout=15)
-        res_json = res.json()
+    # --- 数値に応じた感情・演出メッセージの作成 ---
+    if score <= 24:
+        title = "😱🚨 【極度の恐怖 (Extreme Fear)】 🚨😱"
+        expression = "市場は極限のパニック状態です！！\nみんなが恐怖で逃げ出しています💦 バーゲンセールか、それとも底なし沼か……！？"
+    elif score <= 44:
+        title = "😨⚠️ 【恐怖モード (Fear)】 ⚠️😨"
+        expression = "市場には弱気なムードが漂っています。\n慎重な立ち回りが求められる警戒エリアです！"
+    elif score <= 55:
+        title = "😐⚖️ 【中立・平穏 (Neutral)】 ⚖️😐"
+        expression = "市場はきわめて冷静です。\n嵐の前の静けさか、方向感を探る展開が続いています。"
+    elif score <= 75:
+        title = "😃🚀 【イケイケ強気モード！ (Greed)】 🚀😃"
+        expression = "市場はイケイケムード上昇中！！\n買いの勢いがついています。この波に乗っていきましょう！"
+    else:
+        title = "🤩🔥 【超イケイケ激熱モード！！ (Extreme Greed)】 🔥🤩"
+        expression = "市場は熱狂の渦！絶好調のイケイケ状態です！！\n過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
 
-        if res.status_code == 200 and res_json.get("success"):
-            data_field = res_json.get("data", {})
-            
-            # LINEが間違いなくプレビュー描画できる完全直リンクを取得
-            image_url = data_field.get("url") or data_field.get("display_url")
-            
-            print(f"✅ 画像直リンク取得成功: {image_url}")
-            
-            send_line_message("🧭 【動作テスト：恐怖と貪欲指数 (Fear & Greed Index)】\nメーター画像の表示テストです！")
-            send_line_image(image_url)
-        else:
-            print(f"❌ ImgBBへのアップロード失敗: {res_json}")
-            
-    except Exception as e:
-        print(f"❌ ImgBBアップロード処理中にエラーが発生しました: {e}")
+    # メッセージの組み立て
+    msg = (
+        f"{title}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"📊 現在のスコア: 【 {score} / 100 】\n"
+        f"📝 判定: {rating.upper()}\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{expression}\n\n"
+        f"🔗 詳細チャート:\nhttps://edition.cnn.com/markets/fear-and-greed"
+    )
+
+    send_line_message(msg)
 
 # ==========================================
 # 4. トレーダーズ・ウェブ（信用評価損益率）処理
@@ -327,11 +306,11 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（テスト実行モード）
+# 6. メイン処理（★テストモード：今すぐテキスト演出送信★）
 # ==========================================
 def main():
-    print("🧪 【テスト実行】時間判定を無視して、恐怖と貪欲指数を撮影＆送信します！")
-    capture_and_send_fear_greed()
+    print("🧪 【テスト実行】恐怖と貪欲指数の数値＆演出メッセージを送信します！")
+    check_and_send_fear_greed()
 
 if __name__ == "__main__":
     main()
