@@ -6,10 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==========================================
-# 1. 設定情報（GitHub Secretsから安全に読み込み）
+# 1. 設定情報（LINE アクセストークン）
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
-LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -94,27 +93,27 @@ def is_us_holiday(dt_jst):
     return False
 
 # ==========================================
-# 3. LINE Push Message 送信関数
+# 3. LINE Broadcast Message 送信関数（登録者全員配信）
 # ==========================================
-def send_line_message(text):
-    """テキストメッセージを送信する関数"""
-    if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
-        print("❌ LINEのトークンまたはユーザーIDが設定されていません。")
+def broadcast_line_message(text):
+    """友だち追加している全ユーザーへ一括送信する関数"""
+    if not LINE_ACCESS_TOKEN:
+        print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
 
-    url = "https://api.line.me/v2/bot/message/push"
+    url = "https://api.line.me/v2/bot/message/broadcast"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
-    payload = {"to": LINE_USER_ID, "messages": [{"type": "text", "text": text}]}
+    payload = {"messages": [{"type": "text", "text": text}]}
 
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print("🚀 LINEへのテキスト通知送信に成功しました！")
+            print("🚀 LINE全員一括配信（ブロードキャスト）に成功しました！")
         else:
-            print(f"❌ LINE通知失敗: {res.status_code} - {res.text}")
+            print(f"❌ LINE配信失敗: {res.status_code} - {res.text}")
     except Exception as e:
         print(f"❌ LINE送信エラー: {e}")
 
@@ -223,7 +222,7 @@ def check_and_send_fear_greed():
         f" 76〜100：超イケイケ (Extreme Greed)"
     )
 
-    send_line_message(msg)
+    broadcast_line_message(msg)
 
 # ==========================================
 # 5. トレーダーズ・ウェブ（信用評価損益率）処理
@@ -286,7 +285,7 @@ def check_margin_evaluation():
                     f"状態: {status_text}\n\n"
                     f"📊 過去の推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                 )
-                send_line_message(msg)
+                broadcast_line_message(msg)
 
             elif is_danger or is_recovery:
                 if is_danger:
@@ -301,7 +300,7 @@ def check_margin_evaluation():
                         f"評価損益率が {latest_value}% に回復しました！\n\n"
                         f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                     )
-                send_line_message(msg)
+                broadcast_line_message(msg)
 
             else:
                 print("🟢 平日かつ正常範囲内のため、LINE通知はスキップします。")
@@ -396,7 +395,7 @@ def check_gaikaex_economy_index():
             print(f"✅ 本日発表の米国★★★指標を {len(target_events)} 件発見しました！")
             title = f"🇺🇸 【GMO証券：本日発表の米国★★★ 注目指標】\n📅 {today.strftime('%Y/%m/%d')}"
             msg = f"{title}\n\n" + "\n".join(target_events) + f"\n\n📊 経済指標カレンダー:\n{gaikaex_url}"
-            send_line_message(msg)
+            broadcast_line_message(msg)
         else:
             print("🟢 本日発表の米国★★★指標はありませんでした。")
         print("-" * 30)
@@ -405,7 +404,7 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 7. メイン処理（厳格な時間帯ガード付き）
+# 7. メイン処理（時間帯ガード付き）
 # ==========================================
 def main():
     jst = timezone(timedelta(hours=9))
@@ -423,7 +422,7 @@ def main():
 
     # 2. 日曜日の場合 ＝ 20時台のみ実行（週末定期報告）
     if today_wd == 6:
-        if 19 <= now_hour <= 22: # 20時前後を許容
+        if 19 <= now_hour <= 22:
             print("📅 【日曜日 20:00】週末定期報告を行います。")
             check_margin_evaluation()
             print("---")
@@ -449,7 +448,7 @@ def main():
             print("---")
             check_and_send_fear_greed()
 
-    # 5. 上記以外の時間帯（13時など）に誤って起動した場合 ＝ 完全スキップ
+    # 5. 上記以外の時間帯 ＝ スキップ
     else:
         print(f"⏸️ 現在の時間帯（{now_hour}時）はスケジュール対象外のため、処理を実行せず終了します。")
 
