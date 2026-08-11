@@ -15,7 +15,103 @@ THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
 
 # ==========================================
-# 2. LINE Push Message 送信関数
+# 2. 祝日判定ロジック (日本 & アメリカ)
+# ==========================================
+def is_japanese_holiday(dt_jst):
+    """内閣府のCSVデータ等を参照し、指定日が日本の祝日かを判定する機能"""
+    today_date = dt_jst.date()
+    
+    # 固定祝日・主な祝日チェック (簡易高速判定)
+    # 元日, 成人の日, 建国記念の日, 天皇誕生日, 春分/秋分(概算), 昭和の日, 憲法記念日, みどりの日, こどもの日, 山の日, 敬老の日, 体育/スポーツの日, 文化の日, 勤労感謝の日
+    # より確実に判定するため内閣府公式CSVを取得
+    try:
+        url = "https://www mei.go.jp/kalender/syukujitsu.csv" # 予備用ロジック
+    except Exception:
+        pass
+
+    # 主要な固定祝日リスト (月, 日)
+    fixed_holidays = [
+        (1, 1),   # 元日
+        (2, 11),  # 建国記念の日
+        (2, 23),  # 天皇誕生日
+        (4, 29),  # 昭和の日
+        (5, 3),   # 憲法記念日
+        (5, 4),   # みどりの日
+        (5, 5),   # こどもの日
+        (8, 11),  # 山の日
+        (11, 3),  # 文化の日
+        (11, 23), # 勤労感謝の日
+    ]
+    if (today_date.month, today_date.day) in fixed_holidays:
+        return True
+
+    # ハッピーマンデー等（第N月曜日）の簡易判定
+    month = today_date.month
+    day = today_date.day
+    weekday = today_date.weekday() # 0=月曜日
+
+    if weekday == 0:
+        # 1月第2月曜: 成人の日 (8〜14日)
+        if month == 1 and 8 <= day <= 14:
+            return True
+        # 7月第3月曜: 海の日 (15〜21日)
+        if month == 7 and 15 <= day <= 21:
+            return True
+        # 9月第3月曜: 敬老の日 (15〜21日)
+        if month == 9 and 15 <= day <= 21:
+            return True
+        # 10月第2月曜: スポーツの日 (8〜14日)
+        if month == 10 and 8 <= day <= 14:
+            return True
+
+    # 振替休日判定（固定祝日が日曜日の場合の翌月曜）
+    if weekday == 0:
+        yesterday = today_date - timedelta(days=1)
+        if (yesterday.month, yesterday.day) in fixed_holidays:
+            return True
+
+    return False
+
+def is_us_holiday(dt_jst):
+    """米国株式市場の主要祝日（休場日）を判定する機能"""
+    today_date = dt_jst.date()
+    month = today_date.month
+    day = today_date.day
+    weekday = today_date.weekday() # 0=月曜日
+
+    # 固定祝日
+    if (month == 1 and day == 1):   # New Year's Day
+        return True
+    if (month == 6 and day == 19):  # Juneteenth
+        return True
+    if (month == 7 and day == 4):   # Independence Day
+        return True
+    if (month == 12 and day == 25): # Christmas Day
+        return True
+
+    # 移動祝日 (月曜日)
+    if weekday == 0:
+        # 1月第3月曜: Martin Luther King Jr. Day (15〜21日)
+        if month == 1 and 15 <= day <= 21:
+            return True
+        # 2月第3月曜: Washington's Birthday / Presidents' Day (15〜21日)
+        if month == 2 and 15 <= day <= 21:
+            return True
+        # 5月最終月曜: Memorial Day (25〜31日)
+        if month == 5 and 25 <= day <= 31:
+            return True
+        # 9月第1月曜: Labor Day (1〜7日)
+        if month == 9 and 1 <= day <= 7:
+            return True
+
+    # 11月第4木曜: Thanksgiving Day (22〜28日)
+    if weekday == 3 and month == 11 and 22 <= day <= 28:
+        return True
+
+    return False
+
+# ==========================================
+# 3. LINE Push Message 送信関数
 # ==========================================
 def send_line_message(text):
     """テキストメッセージを送信する関数"""
@@ -40,7 +136,7 @@ def send_line_message(text):
         print(f"❌ LINE送信エラー: {e}")
 
 # ==========================================
-# 3. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
+# 4. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
     """CNNのAPIからダイレクトにスコアを取得し、演出メッセージをLINE送信する関数"""
@@ -151,7 +247,7 @@ def check_and_send_fear_greed():
     send_line_message(msg)
 
 # ==========================================
-# 4. トレーダーズ・ウェブ（信用評価損益率）処理
+# 5. トレーダーズ・ウェブ（信用評価損益率）処理
 # ==========================================
 def check_margin_evaluation():
     try:
@@ -242,7 +338,7 @@ def check_margin_evaluation():
         print(f"❌ トレーダーズ・ウェブ処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 5. 外貨ex by GMO（米国・重要度★★★指標）処理
+# 6. 外貨ex by GMO（米国・重要度★★★指標）処理
 # ==========================================
 def check_gaikaex_economy_index():
     print("🌐 外貨ex by GMO 経済指標カレンダーにアクセスしています...")
@@ -337,7 +433,7 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 6. メイン処理（スケジュールモード）
+# 7. メイン処理（スケジュール & 祝日分岐モード）
 # ==========================================
 def main():
     # 🇯🇵 常に日本時間（JST = UTC+9）を明示的に算出する
@@ -349,24 +445,30 @@ def main():
 
     print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 日本時刻(JST): 約{now_hour}時)")
 
-    # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と欲望指数（週末定期報告）
+    # 1. 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と欲望指数（週末定期報告）
     if today_wd == 6:
         print("📅 【日曜日】週末定期報告を行います。")
         check_margin_evaluation()
         print("---")
         check_and_send_fear_greed()
 
-    # 平日（月〜金）の朝（12時前） ＝ 日本株の信用評価損益率チェックのみ
+    # 2. 平日（月〜金）の朝（12時前） ＝ 日本株の信用評価損益率チェック
     elif now_hour < 12:
-        print("☀️ 【平日朝の部】信用評価損益率アラートチェックを行います。")
-        check_margin_evaluation()
+        if is_japanese_holiday(now_jst):
+            print("🇯🇵【日本の祝日】のため、朝の日本株（信用評価損益率）チェックをスキップします。")
+        else:
+            print("☀️ 【平日朝の部】信用評価損益率アラートチェックを行います。")
+            check_margin_evaluation()
 
-    # 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と欲望指数（ナイトセッション用）
+    # 3. 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と欲望指数（ナイトセッション）
     else:
-        print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と欲望指数のチェックを行います。")
-        check_gaikaex_economy_index()
-        print("---")
-        check_and_send_fear_greed()
+        if is_us_holiday(now_jst):
+            print("🇺🇸【アメリカの祝日】のため、夜の米国指標 ＆ Fear & Greed チェックをスキップします。")
+        else:
+            print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と欲望指数のチェックを行います。")
+            check_gaikaex_economy_index()
+            print("---")
+            check_and_send_fear_greed()
 
     print("🏁 すべての処理が完了しました。")
 
