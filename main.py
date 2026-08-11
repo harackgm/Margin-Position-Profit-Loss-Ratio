@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import requests
 from bs4 import BeautifulSoup
 
@@ -107,7 +107,7 @@ def check_and_send_fear_greed():
         title = "🤩🔥 【超イケイケ激熱発狂モード！！ (Extreme Greed)】 🔥🤩"
         expression = "市場は熱狂の渦！絶好調のイケイケ状態です！！\n過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
 
-    # メッセージの組み立て（冒頭にタイトルを追加）
+    # メッセージの組み立て
     msg = (
         f"🧭 Fear & Greed Index（恐怖と欲望指数）\n\n"
         f"{title}\n"
@@ -169,7 +169,9 @@ def check_margin_evaluation():
             print(f"最新日付: {latest_date}")
             print(f"信用評価損益率: {latest_value}%")
 
-            today_wd = date.today().weekday()
+            # 日本時間の現在曜日を取得
+            jst = timezone(timedelta(hours=9))
+            today_wd = datetime.now(jst).weekday()
             is_sunday = (today_wd == 6)
 
             is_danger = latest_value <= THRES_DANGER
@@ -236,7 +238,10 @@ def check_gaikaex_economy_index():
         res.raise_for_status()
 
         soup = BeautifulSoup(res.text, "html.parser")
-        today = date.today()
+        
+        # 日本時間の本日日付を取得
+        jst = timezone(timedelta(hours=9))
+        today = datetime.now(jst).date()
 
         m_str, d_str = str(today.month), str(today.day)
         m_z, d_z = f"{today.month:02d}", f"{today.day:02d}"
@@ -312,9 +317,14 @@ def check_gaikaex_economy_index():
 # 6. メイン処理（スケジュールモード）
 # ==========================================
 def main():
-    today_wd = date.today().weekday()
-    now_hour = datetime.now().hour
-    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 実行時刻(JST): 約{now_hour}時)")
+    # 🇯🇵 常に日本時間（JST = UTC+9）を明示的に算出する
+    jst = timezone(timedelta(hours=9))
+    now_jst = datetime.now(jst)
+    
+    today_wd = now_jst.weekday()  # 日本時間の曜日（0=月 ... 6=日）
+    now_hour = now_jst.hour       # 日本時間の時刻（0〜23）
+
+    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 日本時刻(JST): 約{now_hour}時)")
 
     # 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と欲望指数（週末定期報告）
     if today_wd == 6:
