@@ -2,12 +2,12 @@ name: Daily Market Alert
 
 on:
   schedule:
-    # Weekday Morning 08:30 JST (UTC 23:30)
-    - cron: '30 23 * * 0-4'
-    # Weekday Evening 21:30 JST (UTC 12:30)
-    - cron: '30 12 * * 1-5'
-    # Sunday Evening 20:00 JST (UTC 11:00)
-    - cron: '0 11 * * 0'
+    # 平日朝 08:23 JST (UTC 23:23)
+    - cron: '23 23 * * 0-4'
+    # 平日夜 19:51 JST (UTC 10:51)
+    - cron: '51 10 * * 1-5'
+    # 日曜夜 19:52 JST (UTC 10:52)
+    - cron: '52 10 * * 0'
   workflow_dispatch:
 
 jobs:
