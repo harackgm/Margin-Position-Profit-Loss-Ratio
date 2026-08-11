@@ -18,17 +18,9 @@ THRES_RECOVERY = 0.0
 # 2. 祝日判定ロジック (日本 & アメリカ)
 # ==========================================
 def is_japanese_holiday(dt_jst):
-    """内閣府のCSVデータ等を参照し、指定日が日本の祝日かを判定する機能"""
+    """日本の祝日判定"""
     today_date = dt_jst.date()
     
-    # 固定祝日・主な祝日チェック (簡易高速判定)
-    # 元日, 成人の日, 建国記念の日, 天皇誕生日, 春分/秋分(概算), 昭和の日, 憲法記念日, みどりの日, こどもの日, 山の日, 敬老の日, 体育/スポーツの日, 文化の日, 勤労感謝の日
-    # より確実に判定するため内閣府公式CSVを取得
-    try:
-        url = "https://www mei.go.jp/kalender/syukujitsu.csv" # 予備用ロジック
-    except Exception:
-        pass
-
     # 主要な固定祝日リスト (月, 日)
     fixed_holidays = [
         (1, 1),   # 元日
@@ -45,23 +37,19 @@ def is_japanese_holiday(dt_jst):
     if (today_date.month, today_date.day) in fixed_holidays:
         return True
 
-    # ハッピーマンデー等（第N月曜日）の簡易判定
+    # ハッピーマンデー等（第N月曜日）
     month = today_date.month
     day = today_date.day
     weekday = today_date.weekday() # 0=月曜日
 
     if weekday == 0:
-        # 1月第2月曜: 成人の日 (8〜14日)
-        if month == 1 and 8 <= day <= 14:
+        if month == 1 and 8 <= day <= 14:   # 成人の日
             return True
-        # 7月第3月曜: 海の日 (15〜21日)
-        if month == 7 and 15 <= day <= 21:
+        if month == 7 and 15 <= day <= 21:  # 海の日
             return True
-        # 9月第3月曜: 敬老の日 (15〜21日)
-        if month == 9 and 15 <= day <= 21:
+        if month == 9 and 15 <= day <= 21:  # 敬老の日
             return True
-        # 10月第2月曜: スポーツの日 (8〜14日)
-        if month == 10 and 8 <= day <= 14:
+        if month == 10 and 8 <= day <= 14:  # スポーツの日
             return True
 
     # 振替休日判定（固定祝日が日曜日の場合の翌月曜）
@@ -73,7 +61,7 @@ def is_japanese_holiday(dt_jst):
     return False
 
 def is_us_holiday(dt_jst):
-    """米国株式市場の主要祝日（休場日）を判定する機能"""
+    """米国株式市場の主要休場日判定"""
     today_date = dt_jst.date()
     month = today_date.month
     day = today_date.day
@@ -89,23 +77,18 @@ def is_us_holiday(dt_jst):
     if (month == 12 and day == 25): # Christmas Day
         return True
 
-    # 移動祝日 (月曜日)
+    # 移動祝日
     if weekday == 0:
-        # 1月第3月曜: Martin Luther King Jr. Day (15〜21日)
-        if month == 1 and 15 <= day <= 21:
+        if month == 1 and 15 <= day <= 21:  # Martin Luther King Jr. Day
             return True
-        # 2月第3月曜: Washington's Birthday / Presidents' Day (15〜21日)
-        if month == 2 and 15 <= day <= 21:
+        if month == 2 and 15 <= day <= 21:  # Presidents' Day
             return True
-        # 5月最終月曜: Memorial Day (25〜31日)
-        if month == 5 and 25 <= day <= 31:
+        if month == 5 and 25 <= day <= 31:  # Memorial Day
             return True
-        # 9月第1月曜: Labor Day (1〜7日)
-        if month == 9 and 1 <= day <= 7:
+        if month == 9 and 1 <= day <= 7:    # Labor Day
             return True
 
-    # 11月第4木曜: Thanksgiving Day (22〜28日)
-    if weekday == 3 and month == 11 and 22 <= day <= 28:
+    if weekday == 3 and month == 11 and 22 <= day <= 28: # Thanksgiving Day
         return True
 
     return False
@@ -139,7 +122,6 @@ def send_line_message(text):
 # 4. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
-    """CNNのAPIからダイレクトにスコアを取得し、演出メッセージをLINE送信する関数"""
     print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
     
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -158,13 +140,11 @@ def check_and_send_fear_greed():
         if res.status_code == 200:
             data = res.json()
             fng_data = data.get("fear_and_greed", {})
-            
             score = int(round(fng_data.get("score", 0)))
             rating = fng_data.get("rating", "Neutral")
             print(f"✅ API取得成功！ スコア = {score}, 状態 = {rating}")
         else:
             print(f"⚠️ APIレスポンスエラー: ステータスコード {res.status_code}")
-            
     except Exception as e:
         print(f"❌ API通信中にエラーが発生しました: {e}")
 
@@ -186,7 +166,7 @@ def check_and_send_fear_greed():
         print("❌ スコアを取得できませんでした。")
         return
 
-    # --- 数値に応じた感情・演出メッセージの作成 ---
+    # 演出メッセージの作成
     if score <= 10:
         title = "💀🔥 【超絶バーゲンセール！ (Extreme Fear ≤ 10)】 🔥💀"
         expression = (
@@ -225,7 +205,6 @@ def check_and_send_fear_greed():
             "過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
         )
 
-    # メッセージの組み立て
     msg = (
         f"🧭 Fear & Greed Index（恐怖と欲望指数）\n\n"
         f"{title}\n"
@@ -263,7 +242,6 @@ def check_margin_evaluation():
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, "html.parser")
 
-        print("🔍 信用評価損益率データを探索中...")
         rows = soup.find_all("tr")
         latest_date = ""
         latest_value = None
@@ -284,11 +262,8 @@ def check_margin_evaluation():
 
         print("-" * 30)
         if latest_value is not None:
-            print("✅ 信用評価損益率 取得成功！")
-            print(f"最新日付: {latest_date}")
-            print(f"信用評価損益率: {latest_value}%")
+            print(f"✅ 信用評価損益率 取得成功！ 最新日付: {latest_date}, 値: {latest_value}%")
 
-            # 日本時間の現在曜日を取得
             jst = timezone(timedelta(hours=9))
             today_wd = datetime.now(jst).weekday()
             is_sunday = (today_wd == 6)
@@ -358,14 +333,11 @@ def check_gaikaex_economy_index():
 
         soup = BeautifulSoup(res.text, "html.parser")
         
-        # 日本時間の本日日付を取得
         jst = timezone(timedelta(hours=9))
         today = datetime.now(jst).date()
 
         m_str, d_str = str(today.month), str(today.day)
         m_z, d_z = f"{today.month:02d}", f"{today.day:02d}"
-
-        print(f"🔍 本日（{today.year}/{m_z}/{d_z}）の米国★★★指標を検索中...")
 
         target_events = []
         rows = soup.find_all("tr")
@@ -433,44 +405,55 @@ def check_gaikaex_economy_index():
         print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
 
 # ==========================================
-# 7. メイン処理（スケジュール & 祝日分岐モード）
+# 7. メイン処理（厳格な時間帯ガード付き）
 # ==========================================
 def main():
-    # 🇯🇵 常に日本時間（JST = UTC+9）を明示的に算出する
     jst = timezone(timedelta(hours=9))
     now_jst = datetime.now(jst)
     
-    today_wd = now_jst.weekday()  # 日本時間の曜日（0=月 ... 6=日）
-    now_hour = now_jst.hour       # 日本時間の時刻（0〜23）
+    today_wd = now_jst.weekday()  # 0=月 ... 5=土, 6=日
+    now_hour = now_jst.hour       # 時刻（0〜23）
 
-    print(f"🤖 自動チェック処理を開始します... (実行曜日(0=月,6=日): {today_wd}, 日本時刻(JST): 約{now_hour}時)")
+    print(f"🤖 チェック開始... (曜日(0=月,6=日): {today_wd}, 日本時刻: 約{now_hour}時)")
 
-    # 1. 日曜日の場合 ＝ 信用評価損益率 ＆ 恐怖と欲望指数（週末定期報告）
+    # 1. 土曜日の場合 ＝ 完全スキップ
+    if today_wd == 5:
+        print("☕ 【土曜日】日米ともに市場休場日のため処理をスキップします。")
+        return
+
+    # 2. 日曜日の場合 ＝ 20時台のみ実行（週末定期報告）
     if today_wd == 6:
-        print("📅 【日曜日】週末定期報告を行います。")
-        check_margin_evaluation()
-        print("---")
-        check_and_send_fear_greed()
-
-    # 2. 平日（月〜金）の朝（12時前） ＝ 日本株の信用評価損益率チェック
-    elif now_hour < 12:
-        if is_japanese_holiday(now_jst):
-            print("🇯🇵【日本の祝日】のため、朝の日本株（信用評価損益率）チェックをスキップします。")
+        if 19 <= now_hour <= 22: # 20時前後を許容
+            print("📅 【日曜日 20:00】週末定期報告を行います。")
+            check_margin_evaluation()
+            print("---")
+            check_and_send_fear_greed()
         else:
-            print("☀️ 【平日朝の部】信用評価損益率アラートチェックを行います。")
+            print(f"⏸️ 日曜日ですが、定期配信時間（20:00）外（現在{now_hour}時）のためスキップします。")
+
+    # 3. 平日（月〜金）朝の部 ＝ 8時台（日本株チェック）
+    elif 7 <= now_hour <= 10:
+        if is_japanese_holiday(now_jst):
+            print("🇯🇵【日本の祝日】のため、朝の日本株チェックをスキップします。")
+        else:
+            print("☀️ 【平日朝 08:30】信用評価損益率アラートチェックを行います。")
             check_margin_evaluation()
 
-    # 3. 平日（月〜金）の夜（12時以降） ＝ 米国重要指標 ＆ 恐怖と欲望指数（ナイトセッション）
-    else:
+    # 4. 平日（月〜金）夜の部 ＝ 21時以降（米国指標 ＆ Fear & Greed）
+    elif 20 <= now_hour <= 23:
         if is_us_holiday(now_jst):
             print("🇺🇸【アメリカの祝日】のため、夜の米国指標 ＆ Fear & Greed チェックをスキップします。")
         else:
-            print("🌙 【平日夜の部】米国重要指標 ＆ 恐怖と欲望指数のチェックを行います。")
+            print("🌙 【平日夜 21:30】米国重要指標 ＆ Fear & Greed チェックを行います。")
             check_gaikaex_economy_index()
             print("---")
             check_and_send_fear_greed()
 
-    print("🏁 すべての処理が完了しました。")
+    # 5. 上記以外の時間帯（13時など）に誤って起動した場合 ＝ 完全スキップ
+    else:
+        print(f"⏸️ 現在の時間帯（{now_hour}時）はスケジュール対象外のため、処理を実行せず終了します。")
+
+    print("🏁 処理が完了しました。")
 
 if __name__ == "__main__":
     main()
