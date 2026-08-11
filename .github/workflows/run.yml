@@ -2,13 +2,13 @@ name: Daily Market Alert
 
 on:
   schedule:
-    # ① 平日（月〜金）の日本時間 08:30 ＝ UTC 23:30 (前日 日〜木)
+    # Weekday Morning 08:30 JST (UTC 23:30)
     - cron: '30 23 * * 0-4'
-    # ② 平日（月〜金）の日本時間 21:30 ＝ UTC 12:30 (月〜金)
+    # Weekday Evening 21:30 JST (UTC 12:30)
     - cron: '30 12 * * 1-5'
-    # ③ 日曜日の日本時間 20:00 ＝ UTC 11:00 (日)
+    # Sunday Evening 20:00 JST (UTC 11:00)
     - cron: '0 11 * * 0'
-  workflow_dispatch: # 手動実行（テスト用）
+  workflow_dispatch:
 
 jobs:
   run-script:
