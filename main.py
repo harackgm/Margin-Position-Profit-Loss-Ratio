@@ -17,10 +17,18 @@ THRES_RECOVERY = 0.0
 # 2. 祝日判定ロジック (日本 & アメリカ)
 # ==========================================
 def is_japanese_holiday(dt_jst):
-    """日本の祝日判定"""
+    """日本の祝日および東証の年末年始休業日の判定"""
     today_date = dt_jst.date()
-    
-    # 主要な固定祝日リスト (月, 日)
+    year = today_date.year
+    month = today_date.month
+    day = today_date.day
+    weekday = today_date.weekday() # 0=月曜日
+
+    # 1. 東証の年末年始休業（12/31〜1/3）
+    if (month == 12 and day == 31) or (month == 1 and day <= 3):
+        return True
+
+    # 2. 固定祝日 (月, 日)
     fixed_holidays = [
         (1, 1),   # 元日
         (2, 11),  # 建国記念の日
@@ -33,14 +41,18 @@ def is_japanese_holiday(dt_jst):
         (11, 3),  # 文化の日
         (11, 23), # 勤労感謝の日
     ]
-    if (today_date.month, today_date.day) in fixed_holidays:
+
+    # 春分の日・秋分の日の算出
+    vernal_equinox = 20 if (year % 4 == 0 or year % 4 == 1) else 21
+    fixed_holidays.append((3, vernal_equinox))
+
+    autumnal_equinox = 22 if (year % 4 == 0 or year % 4 == 1) else 23
+    fixed_holidays.append((9, autumnal_equinox))
+
+    if (month, day) in fixed_holidays:
         return True
 
-    # ハッピーマンデー等（第N月曜日）
-    month = today_date.month
-    day = today_date.day
-    weekday = today_date.weekday() # 0=月曜日
-
+    # 3. ハッピーマンデー等（第N月曜日）
     if weekday == 0:
         if month == 1 and 8 <= day <= 14:   # 成人の日
             return True
@@ -51,7 +63,7 @@ def is_japanese_holiday(dt_jst):
         if month == 10 and 8 <= day <= 14:  # スポーツの日
             return True
 
-    # 振替休日判定（固定祝日が日曜日の場合の翌月曜）
+    # 4. 振替休日判定（固定祝題が日曜日の場合、翌月曜日が休み）
     if weekday == 0:
         yesterday = today_date - timedelta(days=1)
         if (yesterday.month, yesterday.day) in fixed_holidays:
@@ -433,7 +445,7 @@ def main():
     # 3. 平日（月〜金）朝の部 ＝ 8時台（日本株チェック）
     elif 7 <= now_hour <= 10:
         if is_japanese_holiday(now_jst):
-            print("🇯🇵【日本の祝日】のため、朝の日本株チェックをスキップします。")
+            print("🇯🇵【日本の祝日・市場休業日】のため、朝の日本株チェックをスキップします。")
         else:
             print("☀️ 【平日朝 08:30】信用評価損益率アラートチェックを行います。")
             check_margin_evaluation()
