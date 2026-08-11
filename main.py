@@ -216,6 +216,14 @@ def check_and_send_fear_greed():
             "過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
         )
 
+    # チェックボックス表記の判定（英名カット＆1行収まり重視）
+    m0 = "[★]" if score <= 10 else "[  ]"
+    m1 = "[★]" if 11 <= score <= 24 else "[  ]"
+    m2 = "[★]" if 25 <= score <= 44 else "[  ]"
+    m3 = "[★]" if 45 <= score <= 55 else "[  ]"
+    m4 = "[★]" if 56 <= score <= 75 else "[  ]"
+    m5 = "[★]" if score >= 76 else "[  ]"
+
     msg = (
         f"🧭 Fear & Greed Index（恐怖と欲望指数）\n\n"
         f"{title}\n"
@@ -226,12 +234,12 @@ def check_and_send_fear_greed():
         f"{expression}\n\n"
         f"🔗 詳細チャート:\nhttps://edition.cnn.com/markets/fear-and-greed\n\n"
         f"💡 【スコアの目安】\n"
-        f"  0〜10：超絶買い場（最大の恐怖）\n"
-        f" 11〜24：極度の恐怖 (Extreme Fear)\n"
-        f" 25〜44：恐怖 (Fear)\n"
-        f" 45〜55：中立・平穏 (Neutral)\n"
-        f" 56〜75：強気モード (Greed)\n"
-        f" 76〜100：超イケイケ (Extreme Greed)"
+        f"{m0} 0〜10：超絶買い場\n"
+        f"{m1} 11〜24：極度の恐怖\n"
+        f"{m2} 25〜44：恐怖\n"
+        f"{m3} 45〜55：中立・平穏\n"
+        f"{m4} 56〜75：強気モード\n"
+        f"{m5} 76〜100：超イケイケ"
     )
 
     broadcast_line_message(msg)
