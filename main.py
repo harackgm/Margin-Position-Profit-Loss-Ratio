@@ -63,7 +63,7 @@ def is_japanese_holiday(dt_jst):
         if month == 10 and 8 <= day <= 14:  # スポーツの日
             return True
 
-    # 4. 振替休日判定（固定祝題が日曜日の場合、翌月曜日が休み）
+    # 4. 振替休日判定（固定祝期が日曜日の場合、翌月曜日が休み）
     if weekday == 0:
         yesterday = today_date - timedelta(days=1)
         if (yesterday.month, yesterday.day) in fixed_holidays:
@@ -179,14 +179,14 @@ def check_and_send_fear_greed():
 
     # 演出メッセージの作成
     if score <= 10:
-        title = "💀🔥 【超絶バーゲンセール！ (Extreme Fear ≤ 10)】 🔥💀"
+        title = "💀🔥 【超絶大バーゲンセール！ (Extreme Fear ≤ 10)】 🔥💀"
         expression = (
             "市場は歴史的な大パニック状態です！！\n"
             "😱 身の毛もよだつ最大の恐怖に打ち勝った者だけが、将来の大金を手に入れられる……！！\n"
-            "千載一遇の超絶買い場到来か！？"
+            "千載一遇の超絶買い場到来か！？ここで買える者こそが勝者！目をつむって買いまくれ！"
         )
     elif score <= 24:
-        title = "😱🚨 【極度の恐怖 (Extreme Fear)】 🚨😱"
+        title = "😱🚨 【キャー！極度の恐怖 (Extreme Fear)】 🚨😱"
         expression = (
             "市場は極限のパニック状態です！！\n"
             "みんなが恐怖で逃げ出しています💦 バーゲンセールか、それとも底なし沼か……！？"
