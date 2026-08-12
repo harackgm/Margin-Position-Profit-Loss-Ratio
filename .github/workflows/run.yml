@@ -2,12 +2,8 @@ name: Daily Market Alert
 
 on:
   schedule:
-    # 平日朝 08:23 JST (UTC 前日23:23)
-    - cron: '23 23 * * 0,1,2,3,4'
-    # ★タイマー検証用: 本日 12:48 JST (UTC 当日 03:48) ★全曜日指定 '*'
-    - cron: '48 3 * * *'
-    # 日曜夜 19:52 JST (UTC 当日10:52)
-    - cron: '52 10 * * 0'
+    # ★5分ごとに自動実行（タイマー発火の確証テスト用）
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
