@@ -201,7 +201,7 @@ def check_and_send_fear_greed():
         title = "😐⚖️ 【中立・平穏 (Neutral)】 ⚖️😐"
         expression = (
             "市場はきわめて冷静です。\n"
-            "嵐の前の静けさか、方向感を探る展開が続いています。"
+            "嵐の前の静けさか, 方向感を探る展開が続いています。"
         )
     elif score <= 75:
         title = "😃🚀 【強気モード！ (Greed)】 🚀😃"
