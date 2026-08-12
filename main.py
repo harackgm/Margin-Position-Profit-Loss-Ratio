@@ -6,10 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==========================================
-# 1. 設定情報（LINE アクセストークン & ユーザーID）
+# 1. 設定情報（LINE アクセストークン）
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
-LINE_USER_ID = os.environ.get("LINE_USER_ID")  # 自分専用の個別送信ID
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -86,27 +85,17 @@ def is_us_holiday(dt_jst):
     return False
 
 # ==========================================
-# 3. LINE 送信関数（自分専用 Push 通知対応）
+# 3. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
 # ==========================================
 def send_line_message(text):
-    """LINE_USER_IDがあれば自分だけに個別送信、なければ安全のためブロードキャストせずスキップ"""
+    """登録者全員へブロードキャスト一括送信"""
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
 
-    # 自分専用IDが設定されている場合はプッシュ送信（登録者を汚さない）
-    if LINE_USER_ID:
-        url = "https://api.line.me/v2/bot/message/push"
-        payload = {
-            "to": LINE_USER_ID,
-            "messages": [{"type": "text", "text": f"🧪【自分のみテスト通知】\n\n{text}"}]
-        }
-        target_name = "自分専用（Push送信）"
-    else:
-        # テスト時に全員へ送る事故を防ぐため、安全ガードを入れて全配信(broadcast)は実行
-        url = "https://api.line.me/v2/bot/message/broadcast"
-        payload = {"messages": [{"type": "text", "text": text}]}
-        target_name = "全員一括（ブロードキャスト送信）"
+    url = "https://api.line.me/v2/bot/message/broadcast"
+    payload = {"messages": [{"type": "text", "text": text}]}
+    target_name = "全員一括（ブロードキャスト送信）"
 
     headers = {
         "Content-Type": "application/json",
@@ -430,7 +419,7 @@ def main():
         if is_us_holiday(now_jst):
             print("🇺🇸 米国祝日のため夜スキップ")
         else:
-            print("🌙 テスト実行：米国指標 ＆ Fear & Greed チェック")
+            print("🌙 米国指標 ＆ Fear & Greed チェック")
             check_gaikaex_economy_index()
             print("---")
             check_and_send_fear_greed()
