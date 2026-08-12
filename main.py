@@ -6,9 +6,10 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==========================================
-# 1. 設定情報（LINE アクセストークン）
+# 1. 設定情報（LINE アクセストークン & ユーザーID）
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
+LINE_USER_ID = os.environ.get("LINE_USER_ID")  # 自分専用の個別送信ID
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -24,25 +25,14 @@ def is_japanese_holiday(dt_jst):
     day = today_date.day
     weekday = today_date.weekday() # 0=月曜日
 
-    # 1. 東証の年末年始休業（12/31〜1/3）
     if (month == 12 and day == 31) or (month == 1 and day <= 3):
         return True
 
-    # 2. 固定祝日 (月, 日)
     fixed_holidays = [
-        (1, 1),   # 元日
-        (2, 11),  # 建国記念の日
-        (2, 23),  # 天皇誕生日
-        (4, 29),  # 昭和の日
-        (5, 3),   # 憲法記念日
-        (5, 4),   # みどりの日
-        (5, 5),   # こどもの日
-        (8, 11),  # 山の日
-        (11, 3),  # 文化の日
-        (11, 23), # 勤労感謝の日
+        (1, 1), (2, 11), (2, 23), (4, 29), (5, 3),
+        (5, 4), (5, 5), (8, 11), (11, 3), (11, 23),
     ]
 
-    # 春分の日・秋分の日の算出
     vernal_equinox = 20 if (year % 4 == 0 or year % 4 == 1) else 21
     fixed_holidays.append((3, vernal_equinox))
 
@@ -52,18 +42,16 @@ def is_japanese_holiday(dt_jst):
     if (month, day) in fixed_holidays:
         return True
 
-    # 3. ハッピーマンデー等（第N月曜日）
     if weekday == 0:
-        if month == 1 and 8 <= day <= 14:   # 成人の日
+        if month == 1 and 8 <= day <= 14:
             return True
-        if month == 7 and 15 <= day <= 21:  # 海の日
+        if month == 7 and 15 <= day <= 21:
             return True
-        if month == 9 and 15 <= day <= 21:  # 敬老の日
+        if month == 9 and 15 <= day <= 21:
             return True
-        if month == 10 and 8 <= day <= 14:  # スポーツの日
+        if month == 10 and 8 <= day <= 14:
             return True
 
-    # 4. 振替休日判定（固定祝日か日曜日の場合、翌月曜日が休み）
     if weekday == 0:
         yesterday = today_date - timedelta(days=1)
         if (yesterday.month, yesterday.day) in fixed_holidays:
@@ -76,54 +64,59 @@ def is_us_holiday(dt_jst):
     today_date = dt_jst.date()
     month = today_date.month
     day = today_date.day
-    weekday = today_date.weekday() # 0=月曜日
+    weekday = today_date.weekday()
 
-    # 固定祝日
-    if (month == 1 and day == 1):   # New Year's Day
-        return True
-    if (month == 6 and day == 19):  # Juneteenth
-        return True
-    if (month == 7 and day == 4):   # Independence Day
-        return True
-    if (month == 12 and day == 25): # Christmas Day
+    if (month == 1 and day == 1) or (month == 6 and day == 19) or \
+       (month == 7 and day == 4) or (month == 12 and day == 25):
         return True
 
-    # 移動祝日
     if weekday == 0:
-        if month == 1 and 15 <= day <= 21:  # Martin Luther King Jr. Day
+        if month == 1 and 15 <= day <= 21:
             return True
-        if month == 2 and 15 <= day <= 21:  # Presidents' Day
+        if month == 2 and 15 <= day <= 21:
             return True
-        if month == 5 and 25 <= day <= 31:  # Memorial Day
+        if month == 5 and 25 <= day <= 31:
             return True
-        if month == 9 and 1 <= day <= 7:    # Labor Day
+        if month == 9 and 1 <= day <= 7:
             return True
 
-    if weekday == 3 and month == 11 and 22 <= day <= 28: # Thanksgiving Day
+    if weekday == 3 and month == 11 and 22 <= day <= 28:
         return True
 
     return False
 
 # ==========================================
-# 3. LINE Broadcast Message 送信関数
+# 3. LINE 送信関数（自分専用 Push 通知対応）
 # ==========================================
-def broadcast_line_message(text):
-    """友だち追加している全ユーザーへ一括送信する関数"""
+def send_line_message(text):
+    """LINE_USER_IDがあれば自分だけに個別送信、なければ安全のためブロードキャストせずスキップ"""
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
 
-    url = "https://api.line.me/v2/bot/message/broadcast"
+    # 自分専用IDが設定されている場合はプッシュ送信（登録者を汚さない）
+    if LINE_USER_ID:
+        url = "https://api.line.me/v2/bot/message/push"
+        payload = {
+            "to": LINE_USER_ID,
+            "messages": [{"type": "text", "text": f"🧪【自分のみテスト通知】\n\n{text}"}]
+        }
+        target_name = "自分専用（Push送信）"
+    else:
+        # テスト時に全員へ送る事故を防ぐため、安全ガードを入れて全配信(broadcast)は実行
+        url = "https://api.line.me/v2/bot/message/broadcast"
+        payload = {"messages": [{"type": "text", "text": text}]}
+        target_name = "全員一括（ブロードキャスト送信）"
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
-    payload = {"messages": [{"type": "text", "text": text}]}
 
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print("🚀 LINE全員一括配信（ブロードキャスト）に成功しました！")
+            print(f"🚀 LINE送信成功！（対象: {target_name}）")
         else:
             print(f"❌ LINE配信失敗: {res.status_code} - {res.text}")
     except Exception as e:
@@ -159,7 +152,6 @@ def check_and_send_fear_greed():
     except Exception as e:
         print(f"❌ API通信中にエラーが発生しました: {e}")
 
-    # 万が一APIが拒否された場合のWebスクレイピング（予備）
     if score is None:
         print("🔄 予備手段：Webページから数値を探索します...")
         try:
@@ -177,7 +169,6 @@ def check_and_send_fear_greed():
         print("❌ スコアを取得できませんでした。")
         return
 
-    # 演出メッセージの作成
     if score <= 10:
         title = "💀🔥 【超絶大バーゲンセール！ (Extreme Fear ≤ 10)】 🔥💀"
         expression = (
@@ -201,7 +192,7 @@ def check_and_send_fear_greed():
         title = "😐⚖️ 【中立・平穏 (Neutral)】 ⚖️😐"
         expression = (
             "市場はきわめて冷静です。\n"
-            "嵐の前の静けさか, 方向感を探る展開が続いています。"
+            "嵐の前の静けさか、方向感を探る展開が続いています。"
         )
     elif score <= 75:
         title = "😃🚀 【強気モード！ (Greed)】 🚀😃"
@@ -216,7 +207,6 @@ def check_and_send_fear_greed():
             "過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
         )
 
-    # チェックボックス表記
     m0 = "[★]" if score <= 10 else "[  ]"
     m1 = "[★]" if 11 <= score <= 24 else "[  ]"
     m2 = "[★]" if 25 <= score <= 44 else "[  ]"
@@ -242,7 +232,7 @@ def check_and_send_fear_greed():
         f"{m5} 76〜100：超イケイケ"
     )
 
-    broadcast_line_message(msg)
+    send_line_message(msg)
 
 # ==========================================
 # 5. トレーダーズ・ウェブ（信用評価損益率）処理
@@ -291,45 +281,30 @@ def check_margin_evaluation():
             is_recovery = latest_value >= THRES_RECOVERY
 
             if is_sunday:
-                if is_danger:
-                    status_text = f"⚠️ 警戒ライン到達中（{THRES_DANGER}%以下）"
-                elif is_recovery:
-                    status_text = f"🎉 プラス圏（{THRES_RECOVERY}%以上）"
-                else:
-                    status_text = "🟢 正常範囲内"
-
+                status_text = "⚠️ 警戒" if is_danger else ("🎉 プラス圏" if is_recovery else "🟢 正常")
                 msg = (
                     f"📅 【週末定期報告：信用評価損益率】\n"
-                    f"日付: {latest_date}\n"
-                    f"評価損益率: {latest_value}%\n"
-                    f"状態: {status_text}\n\n"
-                    f"📊 過去の推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                    f"日付: {latest_date}\n評価損益率: {latest_value}%\n状態: {status_text}\n\n"
+                    f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                 )
-                broadcast_line_message(msg)
+                send_line_message(msg)
 
             elif is_danger or is_recovery:
-                if is_danger:
-                    msg = (
-                        f"⚠️ 【警戒警報：信用評価損益率】\n日付: {latest_date}\n"
-                        f"評価損益率が {latest_value}% に低下しました！\n（設定閾値: {THRES_DANGER}% 以下）\n\n"
-                        f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
-                    )
-                else:
-                    msg = (
-                        f"🎉 【プラス圏浮上：信用評価損益率】\n日付: {latest_date}\n"
-                        f"評価損益率が {latest_value}% に回復しました！\n\n"
-                        f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
-                    )
-                broadcast_line_message(msg)
-
+                status = "⚠️ 警戒警報" if is_danger else "🎉 プラス圏浮上"
+                msg = (
+                    f"{status}：信用評価損益率\n日付: {latest_date}\n"
+                    f"評価損益率: {latest_value}%\n\n"
+                    f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                )
+                send_line_message(msg)
             else:
-                print("🟢 平日かつ正常範囲内のため、LINE通知はスキップします。")
+                print("🟢 正常範囲内のためLINE送信スキップ。")
         else:
-            print("❌ 信用評価損益率の取得に失敗しました。")
+            print("❌ 信用評価損益率の取得失敗。")
         print("-" * 30)
 
     except Exception as e:
-        print(f"❌ トレーダーズ・ウェブ処理中にエラーが発生しました: {e}")
+        print(f"❌ 処理エラー: {e}")
 
 # ==========================================
 # 6. 外貨ex by GMO（米国・重要度★★★指標）処理
@@ -351,7 +326,6 @@ def check_gaikaex_economy_index():
         res.raise_for_status()
 
         soup = BeautifulSoup(res.text, "html.parser")
-        
         jst = timezone(timedelta(hours=9))
         today = datetime.now(jst).date()
 
@@ -415,57 +389,53 @@ def check_gaikaex_economy_index():
             print(f"✅ 本日発表の米国★★★指標を {len(target_events)} 件発見しました！")
             title = f"🇺🇸 【GMO証券：本日発表の米国★★★ 注目指標】\n📅 {today.strftime('%Y/%m/%d')}"
             msg = f"{title}\n\n" + "\n".join(target_events) + f"\n\n📊 経済指標カレンダー:\n{gaikaex_url}"
-            broadcast_line_message(msg)
+            send_line_message(msg)
         else:
             print("🟢 本日発表の米国★★★指標はありませんでした。")
         print("-" * 30)
 
     except Exception as e:
-        print(f"❌ 外貨ex by GMO処理中にエラーが発生しました: {e}")
+        print(f"❌ GMO指標処理エラー: {e}")
 
 # ==========================================
-# 7. メイン処理（テスト実行対応版）
+# 7. メイン処理
 # ==========================================
 def main():
     jst = timezone(timedelta(hours=9))
     now_jst = datetime.now(jst)
     
-    today_wd = now_jst.weekday()  # 0=月 ... 5=土, 6=日
-    now_hour = now_jst.hour       # 時刻（0〜23）
+    today_wd = now_jst.weekday()
+    now_hour = now_jst.hour
 
-    print(f"🤖 チェック開始... (曜日(0=月,6=日): {today_wd}, 日本時刻: 約{now_hour}時)")
+    print(f"🤖 チェック開始... (曜日: {today_wd}, 時刻: {now_hour}時)")
 
-    # 土曜日はスキップ
     if today_wd == 5:
-        print("☕ 【土曜日】日米ともに市場休場日のため処理をスキップします。")
+        print("☕ 土曜日のためスキップ")
         return
 
-    # 日曜日の場合 ＝ 週末定期報告
     if today_wd == 6:
-        print("📅 【日曜日】週末定期報告を行います。")
+        print("📅 日曜報告実行")
         check_margin_evaluation()
         print("---")
         check_and_send_fear_greed()
 
-    # 平日朝（8時台のみ朝の判定）
     elif now_hour == 8:
         if is_japanese_holiday(now_jst):
-            print("🇯🇵【日本の祝日・市場休業日】のため、朝の日本株チェックをスキップします。")
+            print("🇯🇵 祝日のため朝スキップ")
         else:
-            print("☀️ 【平日朝】信用評価損益率アラートチェックを行います。")
+            print("☀️ 朝の信用評価損益率チェック")
             check_margin_evaluation()
 
-    # それ以外の時間（テスト実行含む夜の部判定）
     else:
         if is_us_holiday(now_jst):
-            print("🇺🇸【アメリカの祝日】のため、夜の米国指標 ＆ Fear & Greed チェックをスキップします。")
+            print("🇺🇸 米国祝日のため夜スキップ")
         else:
-            print("🌙 【平日夜・テスト実行】米国重要指標 ＆ Fear & Greed チェックを行います。")
+            print("🌙 テスト実行：米国指標 ＆ Fear & Greed チェック")
             check_gaikaex_economy_index()
             print("---")
             check_and_send_fear_greed()
 
-    print("🏁 処理が完了しました。")
+    print("🏁 処理完了。")
 
 if __name__ == "__main__":
     main()
