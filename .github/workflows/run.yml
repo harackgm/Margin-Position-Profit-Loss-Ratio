@@ -1,13 +1,6 @@
 name: Daily Market Alert
 
 on:
-  schedule:
-    # 平日朝 08:23 JST (UTC 前日23:23) -> 日〜木に実行（月〜金朝対応）
-    - cron: '23 23 * * 0,1,2,3,4'
-    # 平日夜 20:38 JST (UTC 当日11:38) -> 月〜金夜に実行
-    - cron: '38 11 * * 1-5'
-    # 日曜夜 20:38 JST (UTC 当日11:38) -> 日曜夜に実行
-    - cron: '38 11 * * 0'
   workflow_dispatch:
 
 jobs:
