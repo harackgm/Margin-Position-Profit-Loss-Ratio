@@ -85,7 +85,99 @@ def is_us_holiday(dt_jst):
     return False
 
 # ==========================================
-# 3. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
+# 3. SQ日判定ロジック (祝日・前倒し・月跨ぎ自動対応)
+# ==========================================
+def get_sq_date_for_month(year, month):
+    """指定された年月における実際のSQ日（祝日・休日考慮済み）を返す"""
+    first_day = date(year, month, 1)
+    days_to_first_friday = (4 - first_day.weekday()) % 7
+    second_friday = first_day + timedelta(days=days_to_first_friday + 7)
+
+    target_sq_date = second_friday
+    while True:
+        dt_check = datetime(target_sq_date.year, target_sq_date.month, target_sq_date.day, tzinfo=timezone(timedelta(hours=9)))
+        if target_sq_date.weekday() in [5, 6] or is_japanese_holiday(dt_check):
+            target_sq_date -= timedelta(days=1)
+        else:
+            break
+            
+    return target_sq_date
+
+def get_sq_info(dt_jst):
+    """
+    指定日がSQ日かどうか、およびメジャーSQかどうかを判定する。
+    """
+    today_date = dt_jst.date()
+    year = dt_jst.year
+    month = dt_jst.month
+
+    # 当月のSQ日を計算
+    current_sq_date = get_sq_date_for_month(year, month)
+
+    # 翌月のSQ日も計算（前倒しで当月末に来るケース対策）
+    if month == 12:
+        next_sq_date = get_sq_date_for_month(year + 1, 1)
+    else:
+        next_sq_date = get_sq_date_for_month(year, month + 1)
+
+    if today_date == current_sq_date:
+        is_major = (month in [3, 6, 9, 12])
+        return True, is_major
+    elif today_date == next_sq_date:
+        next_month = 1 if month == 12 else month + 1
+        is_major = (next_month in [3, 6, 9, 12])
+        return True, is_major
+
+    return False, False
+
+def check_and_send_sq_notice(dt_jst):
+    """SQ日の場合にLINEで注意喚起を送信"""
+    is_sq, is_major = get_sq_info(dt_jst)
+
+    if not is_sq:
+        print("🟢 本日はSQ日ではありません。")
+        return
+
+    today_str = dt_jst.strftime('%Y/%m/%d')
+
+    if is_major:
+        title = "🚨🔥 【本日『メジャーSQ』通過日！】 🔥🚨"
+        meaning = (
+            "【メジャーSQとは？】\n"
+            "「日経225先物」と「オプション取引」の満期決済日が重なる特別に重要な日です（3・6・9・12月）。\n"
+            "機関投資家の巨額なポジション調整が一斉に行われるため、売買高が跳ね上がります。"
+        )
+        warning = (
+            "⚠️ 【価格変動・乱高下に厳重警戒！】\n"
+            "特に朝9:00の寄り付き前後を中心に、思惑が交錯して株価が突発的に上下へ大きくブレる傾向があります。\n"
+            "無理な飛び乗りや高値掴みには十分注意し、慎重な取引を心がけましょう！"
+        )
+    else:
+        title = "⚠️📢 【本日『SQ（SQ算出日）』です】 📢⚠️"
+        meaning = (
+            "【SQ（SQ算出日）とは？】\n"
+            "主に「日経225オプション取引」の満期決済日です（毎月第2金曜日周辺）。\n"
+            "SQ値を算出するため、朝方に買い戻しや売り決済の注文が集中します。"
+        )
+        warning = (
+            "⚠️ 【寄り付き前後の値動きに注意】\n"
+            "朝9:00の相場開始時を中心に、一時的に価格変動が大きくなる場合があります。\n"
+            "思わぬ板の急変に備えて、指値管理などを丁寧に行いましょう。"
+        )
+
+    msg = (
+        f"{title}\n"
+        f"📅 日付: {today_str}\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{meaning}\n\n"
+        f"{warning}"
+    )
+
+    print(f"🚀 SQ通知を配信します（メジャーSQ: {is_major}）")
+    send_line_message(msg)
+
+# ==========================================
+# 4. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
 # ==========================================
 def send_line_message(text):
     """登録者全員へブロードキャスト一括送信"""
@@ -112,7 +204,7 @@ def send_line_message(text):
         print(f"❌ LINE送信エラー: {e}")
 
 # ==========================================
-# 4. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
+# 5. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
     print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
@@ -224,7 +316,7 @@ def check_and_send_fear_greed():
     send_line_message(msg)
 
 # ==========================================
-# 5. トレーダーズ・ウェブ（信用評価損益率）処理
+# 6. トレーダーズ・ウェブ（信用評価損益率）処理
 # ==========================================
 def check_margin_evaluation():
     try:
@@ -263,31 +355,36 @@ def check_margin_evaluation():
             print(f"✅ 信用評価損益率 取得成功！ 最新日付: {latest_date}, 値: {latest_value}%")
 
             jst = timezone(timedelta(hours=9))
-            today_wd = datetime.now(jst).weekday()
-            is_sunday = (today_wd == 6)
+            now_jst = datetime.now(jst)
+            is_sunday = (now_jst.weekday() == 6)
 
             is_danger = latest_value <= THRES_DANGER
             is_recovery = latest_value >= THRES_RECOVERY
 
-            if is_sunday:
-                status_text = "⚠️ 警戒" if is_danger else ("🎉 プラス圏" if is_recovery else "🟢 正常")
-                msg = (
-                    f"📅 【週末定期報告：信用評価損益率】\n"
-                    f"日付: {latest_date}\n評価損益率: {latest_value}%\n状態: {status_text}\n\n"
-                    f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
-                )
-                send_line_message(msg)
+            if is_sunday or is_danger or is_recovery:
+                if is_danger:
+                    title = "⚠️🚨 【信用評価損益率：危険水域到達】 🚨⚠️"
+                    status_text = "追証発生や投げ売り（追い込まれた個人の投げ）の危険が高まっています。"
+                elif is_recovery:
+                    title = "🎉📈 【信用評価損益率：プラス圏浮上】 📈🎉"
+                    status_text = "個人投資家の損益がプラスに転じました！"
+                else:
+                    title = "📊 【日曜日：信用評価損益率 定期報告】"
+                    status_text = "現在、正常範囲内（平穏）です。"
 
-            elif is_danger or is_recovery:
-                status = "⚠️ 警戒警報" if is_danger else "🎉 プラス圏浮上"
                 msg = (
-                    f"{status}：信用評価損益率\n日付: {latest_date}\n"
-                    f"評価損益率: {latest_value}%\n\n"
-                    f"📊 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
+                    f"{title}\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"📅 日付: {latest_date}\n"
+                    f"📉 評価損益率: 【 {latest_value}% 】\n"
+                    f"━━━━━━━━━━━━━━━\n\n"
+                    f"{status_text}\n\n"
+                    f"🔗 推移データ:\nhttps://www.traders.co.jp/margin_derivatives/margin_transition"
                 )
                 send_line_message(msg)
             else:
-                print("🟢 正常範囲内のためLINE送信スキップ。")
+                print("🟢 平日かつ正常値のため、LINE通知をスキップしました。")
+
         else:
             print("❌ 信用評価損益率の取得失敗。")
         print("-" * 30)
@@ -296,7 +393,7 @@ def check_margin_evaluation():
         print(f"❌ 処理エラー: {e}")
 
 # ==========================================
-# 6. 外貨ex by GMO（米国・重要度★★★指標）処理
+# 7. 外貨ex by GMO（米国・重要度★★★指標）処理
 # ==========================================
 def check_gaikaex_economy_index():
     print("🌐 外貨ex by GMO 経済指標カレンダーにアクセスしています...")
@@ -387,7 +484,7 @@ def check_gaikaex_economy_index():
         print(f"❌ GMO指標処理エラー: {e}")
 
 # ==========================================
-# 7. メイン処理
+# 8. メイン処理
 # ==========================================
 def main():
     jst = timezone(timedelta(hours=9))
@@ -412,7 +509,9 @@ def main():
         if is_japanese_holiday(now_jst):
             print("🇯🇵 祝日のため朝スキップ")
         else:
-            print("☀️ 朝の信用評価損益率チェック")
+            print("☀️ 朝のSQチェック ＆ 信用評価損益率チェック")
+            check_and_send_sq_notice(now_jst)
+            print("---")
             check_margin_evaluation()
 
     else:
