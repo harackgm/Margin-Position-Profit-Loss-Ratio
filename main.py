@@ -104,17 +104,13 @@ def get_sq_date_for_month(year, month):
     return target_sq_date
 
 def get_sq_info(dt_jst):
-    """
-    指定日がSQ日かどうか、およびメジャーSQかどうかを判定する。
-    """
+    """指定日がSQ日かどうか、およびメジャーSQかどうかを判定する"""
     today_date = dt_jst.date()
     year = dt_jst.year
     month = dt_jst.month
 
-    # 当月のSQ日を計算
     current_sq_date = get_sq_date_for_month(year, month)
 
-    # 翌月のSQ日も計算（前倒しで当月末に来るケース対策）
     if month == 12:
         next_sq_date = get_sq_date_for_month(year + 1, 1)
     else:
@@ -177,7 +173,68 @@ def check_and_send_sq_notice(dt_jst):
     send_line_message(msg)
 
 # ==========================================
-# 4. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
+# 4. FOMC（米連邦公開市場委員会）判定ロジック
+# ==========================================
+def check_and_send_fomc_notice(dt_jst):
+    """
+    FOMC政策金利発表（日本時間で木曜未明 3:00〜4:00）の直前となる
+    『水曜日夜』に事前リマインドを送信する。
+    """
+    today_date = dt_jst.date()
+
+    # 日本時間における政策金利発表日のスケジュール（日付が変わる木曜日未明）
+    # 直前となる「水曜日」に通知を送るため、判定用には水曜日の日付（発表前日）を指定
+    fomc_announcement_dates = [
+        # 2026年スケジュール
+        date(2026, 1, 29),  # 1/28-29開催 -> 1/29未明発表（通知: 1/28水曜夜）
+        date(2026, 3, 19),  # 3/18-19開催 -> 3/19未明発表（通知: 3/18水曜夜）
+        date(2026, 5, 7),   # 5/6-7開催   -> 5/7未明発表  （通知: 5/6水曜夜）
+        date(2026, 6, 18),  # 6/17-18開催 -> 6/18未明発表（通知: 6/17水曜夜）
+        date(2026, 7, 30),  # 7/29-30開催 -> 7/30未明発表（通知: 7/29水曜夜）
+        date(2026, 9, 17),  # 9/16-17開催 -> 9/17未明発表（通知: 9/16水曜夜）
+        date(2026, 10, 29), # 10/28-29開催 -> 10/29未明発表（通知: 10/28水曜夜）
+        date(2026, 12, 10), # 12/9-10開催 -> 12/10未明発表（通知: 12/9水曜夜）
+        # 2027年スケジュール（先行登録）
+        date(2027, 1, 28),
+        date(2027, 3, 18),
+        date(2027, 5, 6),
+        date(2027, 6, 17),
+        date(2027, 7, 29),
+        date(2027, 9, 16),
+        date(2027, 11, 4),
+        date(2027, 12, 16),
+    ]
+
+    # 明日（木曜日）が発表日であれば、本日（水曜日夜）に通知
+    tomorrow_date = today_date + timedelta(days=1)
+
+    if tomorrow_date in fomc_announcement_dates:
+        title = "🏛️🇺🇸 【最重要イベント：今夜『FOMC政策金利発表』！】"
+        details = (
+            "【FOMC（米連邦公開市場委員会）とは？】\n"
+            "米国の金利方針（利上げ・利下げ・維持）を決定する最高意思決定会合です。\n"
+            "日本時間の本日深夜（午前3:00〜4:00頃）に政策金利と声明文が発表され、パウエルFRB議長の記者会見が行われます。"
+        )
+        warning = (
+            "⚠️ 【全世界の市場・為替が激変する警戒夜！】\n"
+            "発表前後でドル円（為替）や米国株、日経平均先物が激しく乱高下する可能性が非常に高くなります。\n"
+            "夜間のポジション持ち越しやレバレッジ取引には十分ご注意ください！"
+        )
+
+        msg = (
+            f"{title}\n"
+            f"📅 発表予定: 日本時間 今夜深夜（明日 {tomorrow_date.strftime('%m/%d')} 未明）\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{details}\n\n"
+            f"{warning}"
+        )
+        print("🚀 FOMC事前リマインド通知を配信します。")
+        send_line_message(msg)
+    else:
+        print("🟢 今夜はFOMC発表の前夜ではありません。")
+
+# ==========================================
+# 5. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
 # ==========================================
 def send_line_message(text):
     """登録者全員へブロードキャスト一括送信"""
@@ -204,7 +261,7 @@ def send_line_message(text):
         print(f"❌ LINE送信エラー: {e}")
 
 # ==========================================
-# 5. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
+# 6. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
     print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
@@ -316,7 +373,7 @@ def check_and_send_fear_greed():
     send_line_message(msg)
 
 # ==========================================
-# 6. トレーダーズ・ウェブ（信用評価損益率）処理
+# 7. トレーダーズ・ウェブ（信用評価損益率）処理
 # ==========================================
 def check_margin_evaluation():
     try:
@@ -393,7 +450,7 @@ def check_margin_evaluation():
         print(f"❌ 処理エラー: {e}")
 
 # ==========================================
-# 7. 外貨ex by GMO（米国・重要度★★★指標）処理
+# 8. 外貨ex by GMO（米国・重要度★★★指標）処理
 # ==========================================
 def check_gaikaex_economy_index():
     print("🌐 外貨ex by GMO 経済指標カレンダーにアクセスしています...")
@@ -484,7 +541,7 @@ def check_gaikaex_economy_index():
         print(f"❌ GMO指標処理エラー: {e}")
 
 # ==========================================
-# 8. メイン処理
+# 9. メイン処理
 # ==========================================
 def main():
     jst = timezone(timedelta(hours=9))
@@ -518,7 +575,9 @@ def main():
         if is_us_holiday(now_jst):
             print("🇺🇸 米国祝日のため夜スキップ")
         else:
-            print("🌙 米国指標 ＆ Fear & Greed チェック")
+            print("🌙 夜の通知チェック (FOMC / 米国指標 / Fear & Greed)")
+            check_and_send_fomc_notice(now_jst)
+            print("---")
             check_gaikaex_economy_index()
             print("---")
             check_and_send_fear_greed()
