@@ -176,49 +176,31 @@ def check_and_send_sq_notice(dt_jst):
 # 4. FOMC（米連邦公開市場委員会）判定ロジック
 # ==========================================
 def check_and_send_fomc_notice(dt_jst):
-    """
-    FOMC政策金利発表（日本時間で木曜未明 3:00〜4:00）の直前となる
-    『水曜日夜』に事前リマインドを送信する。
-    """
+    """FOMC政策金利発表直前となる『水曜日夜』にリマインド送信"""
     today_date = dt_jst.date()
 
-    # 日本時間における政策金利発表日のスケジュール（日付が変わる木曜日未明）
-    # 直前となる「水曜日」に通知を送るため、判定用には水曜日の日付（発表前日）を指定
     fomc_announcement_dates = [
-        # 2026年スケジュール
-        date(2026, 1, 29),  # 1/28-29開催 -> 1/29未明発表（通知: 1/28水曜夜）
-        date(2026, 3, 19),  # 3/18-19開催 -> 3/19未明発表（通知: 3/18水曜夜）
-        date(2026, 5, 7),   # 5/6-7開催   -> 5/7未明発表  （通知: 5/6水曜夜）
-        date(2026, 6, 18),  # 6/17-18開催 -> 6/18未明発表（通知: 6/17水曜夜）
-        date(2026, 7, 30),  # 7/29-30開催 -> 7/30未明発表（通知: 7/29水曜夜）
-        date(2026, 9, 17),  # 9/16-17開催 -> 9/17未明発表（通知: 9/16水曜夜）
-        date(2026, 10, 29), # 10/28-29開催 -> 10/29未明発表（通知: 10/28水曜夜）
-        date(2026, 12, 10), # 12/9-10開催 -> 12/10未明発表（通知: 12/9水曜夜）
-        # 2027年スケジュール（先行登録）
-        date(2027, 1, 28),
-        date(2027, 3, 18),
-        date(2027, 5, 6),
-        date(2027, 6, 17),
-        date(2027, 7, 29),
-        date(2027, 9, 16),
-        date(2027, 11, 4),
-        date(2027, 12, 16),
+        date(2026, 1, 29), date(2026, 3, 19), date(2026, 5, 7),
+        date(2026, 6, 18), date(2026, 7, 30), date(2026, 9, 17),
+        date(2026, 10, 29), date(2026, 12, 10),
+        date(2027, 1, 28), date(2027, 3, 18), date(2027, 5, 6),
+        date(2027, 6, 17), date(2027, 7, 29), date(2027, 9, 16),
+        date(2027, 11, 4), date(2027, 12, 16),
     ]
 
-    # 明日（木曜日）が発表日であれば、本日（水曜日夜）に通知
     tomorrow_date = today_date + timedelta(days=1)
 
     if tomorrow_date in fomc_announcement_dates:
         title = "🏛️🇺🇸 【最重要イベント：今夜『FOMC政策金利発表』！】"
         details = (
             "【FOMC（米連邦公開市場委員会）とは？】\n"
-            "米国の金利方針（利上げ・利下げ・維持）を決定する最高意思決定会合です。\n"
+            "米国の金利方針を決定する最高意思決定会合です。\n"
             "日本時間の本日深夜（午前3:00〜4:00頃）に政策金利と声明文が発表され、パウエルFRB議長の記者会見が行われます。"
         )
         warning = (
             "⚠️ 【全世界の市場・為替が激変する警戒夜！】\n"
-            "発表前後でドル円（為替）や米国株、日経平均先物が激しく乱高下する可能性が非常に高くなります。\n"
-            "夜間のポジション持ち越しやレバレッジ取引には十分ご注意ください！"
+            "発表前後でドル円（為替）や米国株、日経先物が激しく乱高下する可能性が非常に高くなります。\n"
+            "夜間のポジション持ち越しには十分ご注意ください！"
         )
 
         msg = (
@@ -234,7 +216,64 @@ def check_and_send_fomc_notice(dt_jst):
         print("🟢 今夜はFOMC発表の前夜ではありません。")
 
 # ==========================================
-# 5. LINE 送信関数（本番用：全員へ一括ブロードキャスト送信）
+# 4.5 季節的アノマリー判定・通知機能 (NEW!)
+# ==========================================
+def check_and_send_anomaly_notice(dt_jst):
+    """特定の日付や営業日に季節的アノマリー（相場の経験則）を通知する"""
+    today_date = dt_jst.date()
+    month = today_date.month
+    day = today_date.day
+
+    msg_body = None
+
+    # 月の「第1営業日」かどうかの判定（土日・祝日をスキップして確実に拾うため）
+    is_first_business_day = True
+    if dt_jst.weekday() >= 5 or is_japanese_holiday(dt_jst):
+        is_first_business_day = False
+    else:
+        for d in range(1, day):
+            check_date = dt_jst.replace(day=d)
+            if check_date.weekday() < 5 and not is_japanese_holiday(check_date):
+                is_first_business_day = False
+                break
+
+    # 【月初（第1営業日）のアノマリー】
+    if is_first_business_day:
+        if month == 1:
+            msg_body = "🎍 【アノマリー：1月効果 (January Effect)】\n昨年末の節税売りの反動や新規資金流入により、特に中小型株が上昇しやすい傾向があります！大発会以降の動きに注目です。"
+        elif month == 4:
+            msg_body = "💼 【アノマリー：新年度入り・ニューマネー】\n新年度を迎え、機関投資家からの新規資金が市場に入りやすい時期です。例年、4月はパフォーマンスが良い傾向があります。"
+        elif month == 5:
+            msg_body = "🎏 【アノマリー警戒：セル・イン・メイ (Sell in May)】\n「5月に株を売れ」の格言通り、例年5〜10月は相場が軟調になりやすい時期です。ポジション調整やリスク管理を意識しましょう。"
+        elif month == 7:
+            msg_body = "🏄 【アノマリー：サマーラリー】\n7月はボーナス資金の流入などで一時的に相場が上昇しやすく、強含みしやすい傾向があります。"
+        elif month == 8:
+            msg_body = "🌻 【アノマリー警戒：夏枯れ相場】\n8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。突発的な急落（ボラティリティ増大）に十分注意してください。"
+
+    # 【日付固定の中旬・月末アノマリー】 (平日稼働時に該当日であれば通知)
+    if month == 3 and day == 15:
+        msg_body = "🌸 【アノマリー：期末の需給・お化粧買い】\n3月末に向けて、配当権利取りや機関投資家による決算対策の買いが入りやすく、底堅い展開になりやすい時期です。"
+    elif month == 10 and day == 28:
+        msg_body = "🎃 【アノマリー：ハロウィン効果】\n10月末に買い、翌春（4〜5月）に売るとリターンが高くなりやすいとされる時期です。秋は歴史的に底値になりやすい仕込み時です。"
+    elif month == 12 and day == 15:
+        msg_body = "❄️ 【アノマリー警戒：節税売りピーク】\n年末に向けて、税金対策のための「含み損株の売却（節税売り）」が出やすい時期です。需給悪化に注意しましょう。"
+    elif month == 12 and day == 24:
+        msg_body = "🎅 【アノマリー：サンタクロースラリー】\n年の最後の5営業日から新年最初の2営業日にかけて、株価が上昇しやすい期間に入ります！"
+
+    if msg_body:
+        full_msg = (
+            f"🗓️ 【相場アノマリー（季節性）通知】\n\n"
+            f"{msg_body}\n\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"※アノマリーは経験則であり、必ずしもその通りに動くとは限りません。一つの目安としてご活用ください。"
+        )
+        print("🚀 アノマリー通知を配信します。")
+        send_line_message(full_msg)
+    else:
+        print("🟢 本日はアノマリー通知日ではありません。")
+
+# ==========================================
+# 5. LINE 送信関数
 # ==========================================
 def send_line_message(text):
     """登録者全員へブロードキャスト一括送信"""
@@ -264,14 +303,11 @@ def send_line_message(text):
 # 6. 恐怖と欲望指数 (Fear & Greed Index) データ取得＆演出処理
 # ==========================================
 def check_and_send_fear_greed():
-    print("🌐 CNN Fear & Greed IndexのデータAPIへ直接アクセスします...")
+    print("🌐 CNN Fear & Greed IndexのデータAPIへアクセスします...")
     
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     score = None
@@ -285,10 +321,8 @@ def check_and_send_fear_greed():
             score = int(round(fng_data.get("score", 0)))
             rating = fng_data.get("rating", "Neutral")
             print(f"✅ API取得成功！ スコア = {score}, 状態 = {rating}")
-        else:
-            print(f"⚠️ APIレスポンスエラー: ステータスコード {res.status_code}")
     except Exception as e:
-        print(f"❌ API通信中にエラーが発生しました: {e}")
+        print(f"❌ API通信エラー: {e}")
 
     if score is None:
         print("🔄 予備手段：Webページから数値を探索します...")
@@ -301,49 +335,30 @@ def check_and_send_fear_greed():
                 rating = "Neutral"
                 print(f"✅ 予備取得成功！ スコア = {score}")
         except Exception as e:
-            print(f"❌ 予備取得も失敗しました: {e}")
+            print(f"❌ 予備取得も失敗: {e}")
+            return
 
     if score is None:
-        print("❌ スコアを取得できませんでした。")
         return
 
     if score <= 10:
         title = "💀🔥 【超絶大バーゲンセール！ (Extreme Fear ≤ 10)】 🔥💀"
-        expression = (
-            "市場は歴史的な大パニック状態です！！\n"
-            "😱 身の毛もよだつ最大の恐怖に打ち勝った者だけが、将来の大金を手に入れられる……！！\n"
-            "千載一遇の超絶買い場到来か！？ここで買える者こそが勝者！目をつむって買いまくれ！"
-        )
+        expression = "市場は歴史的な大パニック状態です！！\n😱 身の毛もよだつ最大の恐怖に打ち勝った者だけが、将来の大金を手に入れられる……！！\n千載一遇の超絶買い場到来か！？"
     elif score <= 24:
         title = "😱🚨 【キャー！極度の恐怖 (Extreme Fear)】 🚨😱"
-        expression = (
-            "市場は極限のパニック状態です！！\n"
-            "みんなが恐怖で逃げ出しています💦 バーゲンセールか、それとも底なし沼か……！？"
-        )
+        expression = "市場は極限のパニック状態です！！\nみんなが恐怖で逃げ出しています💦 バーゲンセールか、底なし沼か……！？"
     elif score <= 44:
         title = "😨⚠️ 【恐怖モード (Fear)】 ⚠️😨"
-        expression = (
-            "市場には弱気なムードが漂っています。\n"
-            "慎重な立ち回りが求められる警戒エリアです！"
-        )
+        expression = "市場には弱気なムードが漂っています。\n慎重な立ち回りが求められる警戒エリアです！"
     elif score <= 55:
         title = "😐⚖️ 【中立・平穏 (Neutral)】 ⚖️😐"
-        expression = (
-            "市場はきわめて冷静です。\n"
-            "嵐の前の静けさか、方向感を探る展開が続いています。"
-        )
+        expression = "市場はきわめて冷静です。\n嵐の前の静けさか、方向感を探る展開が続いています。"
     elif score <= 75:
         title = "😃🚀 【強気モード！ (Greed)】 🚀😃"
-        expression = (
-            "市場は強気ムード上昇中！！\n"
-            "買いの勢いがついています。この波に乗っていきましょう！"
-        )
+        expression = "市場は強気ムード上昇中！！\n買いの勢いがついています。この波に乗っていきましょう！"
     else:
         title = "🤩🔥 【超イケイケ激熱発狂モード！！ (Extreme Greed)】 🔥🤩"
-        expression = (
-            "市場は熱狂の渦！絶好調のイケイケ状態です！！\n"
-            "過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
-        )
+        expression = "市場は熱狂の渦！絶好調のイケイケ状態です！！\n過熱感バツグン！高値掴みには注意しつつノリノリで行きましょう！"
 
     m0 = "[★]" if score <= 10 else "[  ]"
     m1 = "[★]" if 11 <= score <= 24 else "[  ]"
@@ -360,7 +375,7 @@ def check_and_send_fear_greed():
         f"📝 判定: {rating.upper()}\n"
         f"━━━━━━━━━━━━━━━\n\n"
         f"{expression}\n\n"
-        f"🔗 詳細チャート:\nhttps://edition.cnn.com/markets/fear-and-greed\n\n"
+        f"🔗 詳細:\nhttps://edition.cnn.com/markets/fear-and-greed\n\n"
         f"💡 【スコアの目安】\n"
         f"{m0} 0〜10：超絶買い場\n"
         f"{m1} 11〜24：極度の恐怖\n"
@@ -381,17 +396,13 @@ def check_margin_evaluation():
         print("🌐 トレーダーズ・ウェブにアクセスしています...")
 
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, "html.parser")
 
         rows = soup.find_all("tr")
-        latest_date = ""
-        latest_value = None
+        latest_date, latest_value = "", None
 
         for row in rows:
             cells = row.find_all(["td", "th"])
@@ -414,20 +425,16 @@ def check_margin_evaluation():
             jst = timezone(timedelta(hours=9))
             now_jst = datetime.now(jst)
             is_sunday = (now_jst.weekday() == 6)
-
             is_danger = latest_value <= THRES_DANGER
             is_recovery = latest_value >= THRES_RECOVERY
 
             if is_sunday or is_danger or is_recovery:
                 if is_danger:
-                    title = "⚠️🚨 【信用評価損益率：危険水域到達】 🚨⚠️"
-                    status_text = "追証発生や投げ売り（追い込まれた個人の投げ）の危険が高まっています。"
+                    title, status_text = "⚠️🚨 【信用評価損益率：危険水域到達】 🚨⚠️", "追証発生や投げ売り（追い込まれた個人の投げ）の危険が高まっています。"
                 elif is_recovery:
-                    title = "🎉📈 【信用評価損益率：プラス圏浮上】 📈🎉"
-                    status_text = "個人投資家の損益がプラスに転じました！"
+                    title, status_text = "🎉📈 【信用評価損益率：プラス圏浮上】 📈🎉", "個人投資家の損益がプラスに転じました！"
                 else:
-                    title = "📊 【日曜日：信用評価損益率 定期報告】"
-                    status_text = "現在、正常範囲内（平穏）です。"
+                    title, status_text = "📊 【日曜日：信用評価損益率 定期報告】", "現在、正常範囲内（平穏）です。"
 
                 msg = (
                     f"{title}\n"
@@ -441,7 +448,6 @@ def check_margin_evaluation():
                 send_line_message(msg)
             else:
                 print("🟢 平日かつ正常値のため、LINE通知をスキップしました。")
-
         else:
             print("❌ 信用評価損益率の取得失敗。")
         print("-" * 30)
@@ -457,10 +463,7 @@ def check_gaikaex_economy_index():
     gaikaex_url = "https://www.gaikaex.com/gaikaex/mark/calendar/"
 
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     try:
@@ -471,17 +474,13 @@ def check_gaikaex_economy_index():
         soup = BeautifulSoup(res.text, "html.parser")
         jst = timezone(timedelta(hours=9))
         today = datetime.now(jst).date()
-
         m_str, d_str = str(today.month), str(today.day)
         m_z, d_z = f"{today.month:02d}", f"{today.day:02d}"
 
-        target_events = []
-        rows = soup.find_all("tr")
-        current_is_today = False
+        target_events, current_is_today = [], False
 
-        for row in rows:
-            row_text = row.get_text(" ", strip=True)
-            row_html = str(row)
+        for row in soup.find_all("tr"):
+            row_text, row_html = row.get_text(" ", strip=True), str(row)
 
             if any(p in row_text for p in [f"{m_str}/{d_str}", f"{m_z}/{d_z}", f"{m_str}月{d_str}日", f"{m_z}月{d_z}日"]):
                 current_is_today = True
@@ -489,8 +488,7 @@ def check_gaikaex_economy_index():
                 if current_is_today and not any(p in row_text for p in [f"{m_str}/{d_str}", f"{m_z}/{d_z}"]):
                     current_is_today = False
 
-            if not current_is_today:
-                continue
+            if not current_is_today: continue
 
             is_us = "アメリカ" in row_text or "米国" in row_text
             if not is_us:
@@ -500,17 +498,14 @@ def check_gaikaex_economy_index():
                         is_us = True
                         break
 
-            if not is_us:
-                continue
+            if not is_us: continue
 
             is_star3 = ("★★★" in row_text or "★3" in row_text or 
-                        re.search(r"star[_-]?3|rank[_-]?3|level[_-]?3", row_html, re.I) or 
-                        row_html.count("star") >= 3)
+                        re.search(r"star[_-]?3|rank[_-]?3|level[_-]?3", row_html, re.I) or row_html.count("star") >= 3)
 
             if is_star3:
                 time_match = re.search(r"\d{2}:\d{2}", row_text)
                 time_str = time_match.group(0) if time_match else "時間未定"
-
                 name_str = ""
                 link_elem = row.find("a")
                 if link_elem and len(link_elem.get_text(strip=True)) > 2:
@@ -566,10 +561,12 @@ def main():
         if is_japanese_holiday(now_jst):
             print("🇯🇵 祝日のため朝スキップ")
         else:
-            print("☀️ 朝のSQチェック ＆ 信用評価損益率チェック")
+            print("☀️ 朝のチェック (SQ / 信用評価 / アノマリー)")
             check_and_send_sq_notice(now_jst)
             print("---")
             check_margin_evaluation()
+            print("---")
+            check_and_send_anomaly_notice(now_jst)  # ← NEW: アノマリーチェックをここに追加
 
     else:
         if is_us_holiday(now_jst):
