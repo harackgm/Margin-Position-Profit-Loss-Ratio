@@ -12,8 +12,7 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")  # 開発者の個別テスト用ID
 
-# ★ テスト実行用安全スイッチ
-# Trueの時は、条件を無視して全6種類のアラートを生成し、開発者のみにカルーセル送信します。
+# ★ テスト実行用安全スイッチ（True: 全件強制生成＆開発者のみへ個別Push配信）
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -55,7 +54,6 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
     body_contents = []
     
-    # タイトルが辞書（構造体）で渡された場合は自由レイアウト、文字列の場合はデフォルト表示
     if isinstance(title, list):
         body_contents.extend(title)
     else:
@@ -118,7 +116,7 @@ def get_sq_bubble(dt_jst, force_test=False):
     return create_flex_bubble(header, color, title, desc, "※SQ算出にかかわる板の急変にご注意ください。")
 
 def get_margin_bubble(force_test=False):
-    latest_date, latest_value = "2026/09/04", -11.50
+    latest_date, latest_value = "2026/09/04", -11.50 # テスト用ダミーデータ
     if not force_test:
         try:
             res = requests.get("https://www.traders.co.jp/margin_derivatives/margin_transition", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -171,7 +169,7 @@ def get_anomaly_bubble(dt_jst, force_test=False):
         if m == 9 and d == 8:
             title = "🍂 9月効果 (September Effect)"
             desc = (
-                "レイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。\n\n"
+                "レイバーデイ明けで機関投資家が本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。\n\n"
                 "💡 【注意点】\n"
                 "無理な買い増しは避け、キャッシュ比率を高めて押し目を待つのが定石とされています。"
             )
@@ -198,7 +196,7 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None
+    if len(events) > 10: return None # 大量通知ストッパー（MAX_LIMIT制御）
 
     desc = (
         "本日発表予定の重要度★★★（最重要）指標です：\n\n" + 
@@ -219,19 +217,19 @@ def get_fgi_bubble(force_test=False):
     
     if score is None: return None
 
-    # ★ 7段階の判定とインデックス計算
+    # ★ 正しい7段階の判定インデックス
     idx = 0
     if score <= 10: idx = 0
     elif score <= 24: idx = 1
     elif score <= 44: idx = 2
-    elif score <= 55: idx = 3 # 中立
+    elif score <= 55: idx = 3 # 中立（真ん中）
     elif score <= 75: idx = 4
     elif score <= 90: idx = 5
     else: idx = 6
 
-    # 7段階のカラーパレット
-    colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
-    current_color = colors[idx] # ★ 現在地の判定色を取得
+    # 7段階のバランス調整カラーパレット（中央の灰を挟んで左右対称）
+    colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
+    current_color = colors[idx]
 
     if score <= 10: desc = "歴史的な大パニック！ここは絶対に買え！！身の毛もよだつ恐怖に打ち勝ち大金を手に入れろ！"
     elif score <= 24: desc = "市場は極度の恐怖！買い場で間違いなし！みんなが逃げ出している超バーゲンセールです。"
@@ -241,26 +239,26 @@ def get_fgi_bubble(force_test=False):
     elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
     else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
-    # ★ タイトル領域：「スコア」と「判定」を分離し、判定文字に指定色を適用
     title_structures = [
         {"type": "text", "text": f"スコア: 【 {score} / 100 】", "weight": "bold", "size": "xl", "color": "#111111"},
         {
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
                 {"type": "text", "text": "判定: ", "weight": "bold", "size": "xl", "color": "#111111", "flex": 0},
-                {"type": "text", "text": f"{rating}", "weight": "bold", "size": "xl", "color": current_color, "flex": 1} # ★ メーターと同色を指定
+                {"type": "text", "text": f"{rating}", "weight": "bold", "size": "xl", "color": current_color, "flex": 1}
             ]
         }
     ]
 
+    # ★ 凡例の設定（色のラベルと文言の対応を完全に修正）
     legend_info = [
         ("濃赤:", " 0〜10 (ここは絶対に買え！！)"),
-        ("赤:", " 11〜24 (買い場で間違いなし！)"),
-        ("濃橙:", " 25〜44 (極度の恐怖入り)"),
-        ("橙:", " 45〜55 (恐怖)"),
-        ("灰:", " 56〜75 (中立・平穏)"),
-        ("緑:", " 76〜90 (強気モード)"),
-        ("濃緑:", " 91〜100 (超イケイケ)")
+        ("赤:", " 11〜24 (極度の恐怖)"),
+        ("橙:", " 25〜44 (恐怖)"),
+        ("灰:", " 45〜55 (中立・平穏)"),
+        ("薄緑:", " 56〜75 (強気モード)"),
+        ("緑:", " 76〜90 (超イケイケ！)"),
+        ("濃緑:", " 91〜100 (暴落間近)")
     ]
 
     marker_boxes = []
@@ -290,7 +288,7 @@ def get_fgi_bubble(force_test=False):
                 {
                     "type": "text",
                     "text": color_label,
-                    "color": colors[i],
+                    "color": colors[i], # 色ラベル部分のみ指定色
                     "size": "xs",
                     "weight": "bold",
                     "flex": 0
@@ -298,9 +296,9 @@ def get_fgi_bubble(force_test=False):
                 {
                     "type": "text",
                     "text": text_body,
-                    "color": "#111111",
+                    "color": "#111111", # 数値・テキスト部分は黒色
                     "size": "xs",
-                    "weight": "bold" if is_current else "regular",
+                    "weight": "bold" if is_current else "regular", # 現在地のみ太字で強調
                     "flex": 1,
                     "wrap": True
                 }
@@ -324,7 +322,6 @@ def get_fgi_bubble(force_test=False):
         buffett_box
     ]
 
-    # ★ カード最上部のヘッダー背景色も現在の判定色(current_color)へ連動
     return create_flex_bubble("🧭 Fear & Greed Index", current_color, title_structures, desc, "ソース: CNN Markets", extra_contents)
 
 # ==========================================
@@ -347,16 +344,20 @@ def send_carousel_message(bubbles):
     }
 
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
-    url = "https://api.line.me/v2/bot/message/push" if DEBUG_MODE else "https://api.line.me/v2/bot/message/broadcast"
     
     if DEBUG_MODE:
         if not LINE_USER_ID: return
+        url = "https://api.line.me/v2/bot/message/push"
         payload["to"] = LINE_USER_ID
+        target_name = "開発者のみ（Push送信）"
+    else:
+        url = "https://api.line.me/v2/bot/message/broadcast"
+        target_name = "全員一括（ブロードキャスト送信）"
 
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
         if res.status_code == 200:
-            print(f"🚀 LINE カルーセル送信成功！（バブル数: {len(bubbles)}）")
+            print(f"🚀 LINE カルーセル送信成功！（対象: {target_name} / バブル数: {len(bubbles)}）")
         else:
             print(f"❌ LINE配信失敗: {res.status_code} - {res.text}")
     except Exception as e:
@@ -386,11 +387,10 @@ def main():
         print("🏁 テスト処理完了。")
         return
 
-    # --- 以下、本番運用時のロジック ---
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
-    if today_wd == 5: return # 土曜スキップ
+    if today_wd == 5: return
 
     if today_wd == 6:
         b_margin = get_margin_bubble()
