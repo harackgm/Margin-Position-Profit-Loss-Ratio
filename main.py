@@ -83,7 +83,7 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
     return bubble
 
 # ==========================================
-# 4. 各機能のバブル生成ロジック
+# 4. 各機能のバブル生成ロジック (★余白埋め＆解説拡張版)
 # ==========================================
 def get_sq_bubble(dt_jst, force_test=False):
     is_sq, is_major = False, False
@@ -102,13 +102,19 @@ def get_sq_bubble(dt_jst, force_test=False):
 
     is_major = True if force_test else is_major
     header = "🚨 メジャーSQ日！" if is_major else "⚠️ 本日SQ算出日"
-    color = "#C0392B" # 濃い赤
+    color = "#C0392B"
     title = f"{'🔥 メジャーSQ通過日' if is_major else '📢 SQ算出日'}\n価格変動に厳重警戒！"
-    desc = "寄り付き(9:00)前後を中心に、思惑が交錯し株価が突発的に乱高下する傾向があります。無理な高値掴みに注意し、指値管理を徹底してください。"
-    return create_flex_bubble(header, color, title, desc, "※SQ値算出のための決済注文が集中します。")
+    
+    # ★ 余白を埋めるための解説追加
+    desc = (
+        "寄り付き(9:00)前後を中心に、機関投資家の巨額な決済注文が交錯し、株価が突発的に上下へブレやすくなります。\n\n"
+        "💡 【豆知識】\n"
+        "メジャーSQは3・6・9・12月の第2金曜日周辺に訪れ、先物とオプションの決済が重なる超重要日です。通過後は相場のトレンドがガラリと変わることも多いため、慎重な立ち回りが必要です。"
+    )
+    return create_flex_bubble(header, color, title, desc, "※SQ算出にかかわる板の急変にご注意ください。")
 
 def get_margin_bubble(force_test=False):
-    latest_date, latest_value = "2026/09/04", -11.50 # テスト用ダミーデータ
+    latest_date, latest_value = "2026/09/04", -11.50
     if not force_test:
         try:
             res = requests.get("https://www.traders.co.jp/margin_derivatives/margin_transition", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -131,26 +137,53 @@ def get_margin_bubble(force_test=False):
     color = "#E74C3C" if latest_value <= THRES_DANGER else ("#27AE60" if latest_value >= 0 else "#2980B9")
     header = "📉 信用評価損益率 (危険水域)" if latest_value <= THRES_DANGER else "📊 信用評価損益率"
     title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
-    desc = "追証発生や追い込まれた個人の投げ売りが出る危険性が高まっています。" if latest_value <= THRES_DANGER else "現在の個人投資家の損益状況は正常範囲内です。"
+    
+    # ★ 余白を埋めるための解説追加
+    if latest_value <= THRES_DANGER:
+        desc = (
+            "個人投資家の含み損が拡大しており、追証回避の投げ売り（追い込まれた売却）が出やすい危険水域です。\n\n"
+            "💡 【相場のセオリー】\n"
+            "歴史的に-10%〜-15%に達すると個人の投げ売りが一巡し、セリングクライマックス（底打ち・絶好の買い場）を形成しやすいとされています。"
+        )
+    else:
+        desc = (
+            "個人投資家の損益状況は正常範囲内（平穏）です。\n\n"
+            "💡 【相場のセオリー】\n"
+            "一般的に-5%〜-9%程度が平時の水準です。0%（プラス圏）に近づくほど個人投資家の懐が温まり、相場全体の買い勢力が強まります。"
+        )
+
     return create_flex_bubble(header, color, title, desc, "ソース: トレーダーズ・ウェブ")
 
 def get_anomaly_bubble(dt_jst, force_test=False):
     title, desc = "", ""
     if force_test:
-        # ★改行防止のため「サンクスギビング・ラリー」の「・」を削除して文字数を調整
-        title, desc = "🦃 サンクスギビングラリー", "明日の米国感謝祭から「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間です。突発的な動きに注意。"
+        title = "🦃 サンクスギビングラリー"
+        desc = (
+            "明日の米国感謝祭から週末の「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上昇しやすいアノマリー期間に入ります！\n\n"
+            "💡 【注目ポイント】\n"
+            "機関投資家が休暇に入るため市場の商い（取引量）は薄くなります。少しの注文で株価が大きく動く可能性があるため注意してください。"
+        )
     else:
         m, d = dt_jst.month, dt_jst.day
         if m == 9 and d == 8:
-            title, desc = "🍂 9月効果 (September Effect)", "レイバーデイ明けで機関投資家が本格復帰。秋に向けた節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。"
+            title = "🍂 9月効果 (September Effect)"
+            desc = (
+                "レイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。\n\n"
+                "💡 【注意点】\n"
+                "無理な買い増しは避け、キャッシュ比率を高めて押し目を待つのが定石とされています。"
+            )
         if not title: return None
     
-    return create_flex_bubble("🗓️ 相場カレンダー", "#2C3E50", title, desc, "※アノマリーは経験則です。一つの目安として活用ください。")
+    return create_flex_bubble("🗓️ 相場カレンダー", "#2C3E50", title, desc, "※アノマリーは経験則であり、確定事項ではありません。")
 
 def get_fomc_bubble(dt_jst, force_test=False):
     if not force_test: return None
     title = "🏛️🇺🇸 FOMC政策金利発表"
-    desc = "日本時間の今夜深夜(3:00〜4:00頃)に政策金利が発表されます。\n発表前後でドル円や米国株が激しく乱高下する警戒夜です。ポジションの持ち越しに注意！"
+    desc = (
+        "日本時間の今夜深夜(3:00〜4:00頃)に米国の政策金利と声明文が発表され、パウエルFRB議長の記者会見が行われます。\n\n"
+        "💡 【影響と注意点】\n"
+        "全世界の株価・ドル円（為替）のトレンドを左右する最重要イベントです。発表直後は上下に激しい乱高下が発生するため、夜間のポジション持ち越しは厳重に警戒してください。"
+    )
     return create_flex_bubble("🚨 最重要イベント", "#8E44AD", title, desc)
 
 def get_gmo_bubble(force_test=False):
@@ -162,9 +195,13 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None # 大量通知ストッパー（MAX_LIMIT制御）
+    if len(events) > 10: return None # ★ 大量通知ストッパー（MAX_LIMIT制御）
 
-    desc = "\n".join(events)
+    desc = (
+        "本日発表予定の重要度★★★（最重要）指標です：\n\n" + 
+        "\n".join(events) + 
+        "\n\n💡 指標発表の前後数分間は、為替・先物市場でスプレッドが拡大し突発的な値動きが起きやすくなります。"
+    )
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
@@ -220,7 +257,7 @@ def get_fgi_bubble(force_test=False):
         height = "16px" if i == idx else "6px"
         bar_boxes.append({
             "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
-            "contents": []
+            "contents": [] # ★ 空contentsでエラー回避
         })
 
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
