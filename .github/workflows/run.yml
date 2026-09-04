@@ -1,27 +1,38 @@
-name: Daily Market Alert
+name: Market Anomaly Alert Bot
 
 on:
-  workflow_dispatch:
+  schedule:
+    # JST(日本時間)を基準にcronを設定 (UTCで指定するため、日本時間からマイナス9時間)
+    # 例: 朝8時(JST) = 前日23時(UTC) / 夜21時(JST) = 12時(UTC)
+    - cron: '0 23 * * *' # JST 朝8:00
+    - cron: '0 12 * * *' # JST 夜21:00
+  workflow_dispatch: # 手動でテスト実行するためのボタンを有効化
 
 jobs:
-  run-script:
+  run-bot:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests bs4
+          pip install requests beautifulsoup4
 
-      - name: Run script
+      - name: Run Python Script
         env:
+          # サーバー環境を強制的に日本時間に固定
+          TZ: 'Asia/Tokyo'
+          # GitHub SecretsからPythonコードへ変数を渡す
           LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python main.py
+        run: |
+          # 実行するPythonファイル名を指定（実際のファイル名に合わせて変更してください）
+          python main.py
