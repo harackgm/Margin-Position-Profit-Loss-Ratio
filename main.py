@@ -10,7 +10,7 @@ import json
 # 1. 設定情報
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
-LINE_USER_ID = os.environ.get("LINE_USER_ID")  # ★ 開発者の個別テスト用ID
+LINE_USER_ID = os.environ.get("LINE_USER_ID")  # 開発者の個別テスト用ID
 
 # ★ テスト実行用安全スイッチ
 # Trueの時は、条件を無視して全6種類のアラートを生成し、開発者のみにカルーセル送信します。
@@ -161,7 +161,7 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None
+    if len(events) > 10: return None # ★ 大量通知ストッパー（MAX_LIMIT）
 
     desc = "\n".join(events)
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
@@ -179,63 +179,84 @@ def get_fgi_bubble(force_test=False):
     if score is None: return None
     color = "#E74C3C" if score <= 24 else ("#27AE60" if score >= 56 else "#34495E")
     
-    # 7段階に応じた解説文の変更
-    if score <= 5: desc = "歴史的な大パニック！千載一遇の超絶買い場到来か！？目をつむって買いまくれ！"
-    elif score <= 10: desc = "市場は極限のパニック状態です！恐怖に打ち勝つ者が将来の利益を手にします。"
-    elif score <= 24: desc = "市場は極度の恐怖に包まれています。みんなが逃げ出しているバーゲンセール状態です。"
-    elif score <= 44: desc = "市場には弱気なムードが漂い、警戒と恐怖が広がっています。"
+    # ★ 新しい7段階のスコア区分に応じたメッセージ
+    if score <= 10: desc = "歴史的な大パニック！ここは絶対に買え！！身の毛もよだつ恐怖に打ち勝ち大金を手に入れろ！"
+    elif score <= 24: desc = "市場は極度の恐怖！買い場で間違いなし！みんなが逃げ出している超バーゲンセールです。"
+    elif score <= 44: desc = "市場は恐怖モードに突入中。弱気なムードが漂っています。"
     elif score <= 55: desc = "市場はきわめて冷静です。嵐の前の静けさか、方向感を探る展開が続いています。"
-    elif score <= 75: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
-    else: desc = "市場は熱狂の渦！絶好調ですが、過熱感バツグンなので高値掴みには注意！"
+    elif score <= 75: desc = "市場は強気モード上昇中！買いの勢いがついています。"
+    elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
+    else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
-    # ★ 7段階メーターの生成ロジック
+    # ★ 7段階のインデックス判定 (中立=45〜55がちょうど真ん中の3)
     idx = 0
-    if score <= 5: idx = 0
-    elif score <= 10: idx = 1
-    elif score <= 24: idx = 2
-    elif score <= 44: idx = 3
-    elif score <= 55: idx = 4
-    elif score <= 75: idx = 5
+    if score <= 10: idx = 0
+    elif score <= 24: idx = 1
+    elif score <= 44: idx = 2
+    elif score <= 55: idx = 3 # 中立（真ん中）
+    elif score <= 75: idx = 4
+    elif score <= 90: idx = 5
     else: idx = 6
 
-    # メーターの7段階の色
+    # 7段階のカラーパレット
     colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
-    labels = [
-        "濃赤: 0〜5 (ここは絶対に買え！！)",
-        "赤: 6〜10 (買い場で間違いなし！)",
-        "濃橙: 11〜24 (極度の恐怖入り)",
-        "橙: 25〜44 (恐怖)",
-        "灰: 45〜55 (中立・平穏)",
-        "緑: 56〜75 (強気モード)",
-        "濃緑: 76〜100 (超イケイケ)"
+    
+    # 凡例用の設定（[色の表示名, スコアと説明]）
+    legend_info = [
+        ("濃赤:", " 0〜10 (ここは絶対に買え！！)"),
+        ("赤:", " 11〜24 (極度の恐怖)"),
+        ("濃橙:", " 25〜44 (恐怖)"),
+        ("橙:", " 45〜55 (中立・平穏)"),
+        ("灰:", " 56〜75 (強気モード)"),
+        ("緑:", " 76〜90 (超イケイケ！)"),
+        ("濃緑:", " 91〜100 (暴落間近)")
     ]
 
     marker_boxes = []
     bar_boxes = []
 
     for i in range(7):
-        # マーカー
+        # ▼ マーカー
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({
             "type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1
         })
-        # カラーバー
-        height = "12px" if i == idx else "6px"
+        # ★ カラーバー（現在地をさらに強調するため 16px に太く変更）
+        height = "16px" if i == idx else "6px"
         bar_boxes.append({
             "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
             "contents": []
         })
 
-    # ★ 凡例リストを色付きで生成
+    # ★ 凡例のテキスト生成（色名のみカラー、数値と文章は黒色、現在地は太字）
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
     for i in range(7):
+        color_label, text_body = legend_info[i]
+        is_current = (i == idx)
+        
         legend_boxes.append({
-            "type": "text",
-            "text": labels[i],
-            "size": "xs",
-            "color": colors[i], # 各行にバーと同じ色を適用
-            "wrap": True,
-            "weight": "bold" if i == idx else "regular" # 現在地だけ太字にする
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "xs",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": color_label,
+                    "color": colors[i], # 色名のみ各々の色を適用
+                    "size": "xs",
+                    "weight": "bold" if is_current else "bold",
+                    "flex": 0
+                },
+                {
+                    "type": "text",
+                    "text": text_body,
+                    "color": "#111111", # 数値とテキストは黒色
+                    "size": "xs",
+                    "weight": "bold" if is_current else "regular", # ★ 現在地の行全体を太字で強調
+                    "flex": 1,
+                    "wrap": True
+                }
+            ]
         })
 
     # ★ ウォーレン・ヴァフェットの名言
@@ -248,12 +269,11 @@ def get_fgi_bubble(force_test=False):
         "margin": "lg"
     }
 
-    # ★ カードの組み立て
     extra_contents = [
         {"type": "separator", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "xs", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "xs", "alignItems": "center"},
-        {"type": "box", "layout": "vertical", "contents": legend_boxes, "margin": "lg", "spacing": "xs"},
+        {"type": "box", "layout": "vertical", "contents": legend_boxes, "margin": "lg"},
         buffett_box
     ]
 
