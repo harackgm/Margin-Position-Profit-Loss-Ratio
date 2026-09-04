@@ -53,11 +53,16 @@ def is_us_holiday(dt_jst):
 # ==========================================
 def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
-    body_contents = [
-        {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
-        {"type": "separator", "margin": "md"},
-        {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
-    ]
+    body_contents = []
+    
+    # タイトルが辞書（構造体）で渡された場合は自由レイアウト、文字列の場合はデフォルト表示
+    if isinstance(title, list):
+        body_contents.extend(title)
+    else:
+        body_contents.append({"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"})
+
+    body_contents.append({"type": "separator", "margin": "md"})
+    body_contents.append({"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"})
     
     if extra_contents:
         body_contents.extend(extra_contents)
@@ -83,7 +88,7 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
     return bubble
 
 # ==========================================
-# 4. 各機能のバブル生成ロジック (★余白埋め＆解説拡張版)
+# 4. 各機能のバブル生成ロジック
 # ==========================================
 def get_sq_bubble(dt_jst, force_test=False):
     is_sq, is_major = False, False
@@ -105,7 +110,6 @@ def get_sq_bubble(dt_jst, force_test=False):
     color = "#C0392B"
     title = f"{'🔥 メジャーSQ通過日' if is_major else '📢 SQ算出日'}\n価格変動に厳重警戒！"
     
-    # ★ 余白を埋めるための解説追加
     desc = (
         "寄り付き(9:00)前後を中心に、機関投資家の巨額な決済注文が交錯し、株価が突発的に上下へブレやすくなります。\n\n"
         "💡 【豆知識】\n"
@@ -138,7 +142,6 @@ def get_margin_bubble(force_test=False):
     header = "📉 信用評価損益率 (危険水域)" if latest_value <= THRES_DANGER else "📊 信用評価損益率"
     title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
     
-    # ★ 余白を埋めるための解説追加
     if latest_value <= THRES_DANGER:
         desc = (
             "個人投資家の含み損が拡大しており、追証回避の投げ売り（追い込まれた売却）が出やすい危険水域です。\n\n"
@@ -195,7 +198,7 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None # ★ 大量通知ストッパー（MAX_LIMIT制御）
+    if len(events) > 10: return None
 
     desc = (
         "本日発表予定の重要度★★★（最重要）指標です：\n\n" + 
@@ -205,7 +208,7 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 45, "Neutral" # テスト用ダミーデータ
+    score, rating = 45, "Neutral" # テスト用ダミーデータ（45は中立）
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -215,8 +218,21 @@ def get_fgi_bubble(force_test=False):
         except: return None
     
     if score is None: return None
-    color = "#E74C3C" if score <= 24 else ("#27AE60" if score >= 56 else "#34495E")
-    
+
+    # ★ 7段階の判定とインデックス計算
+    idx = 0
+    if score <= 10: idx = 0
+    elif score <= 24: idx = 1
+    elif score <= 44: idx = 2
+    elif score <= 55: idx = 3 # 中立
+    elif score <= 75: idx = 4
+    elif score <= 90: idx = 5
+    else: idx = 6
+
+    # 7段階のカラーパレット
+    colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
+    current_color = colors[idx] # ★ 現在地の判定色を取得
+
     if score <= 10: desc = "歴史的な大パニック！ここは絶対に買え！！身の毛もよだつ恐怖に打ち勝ち大金を手に入れろ！"
     elif score <= 24: desc = "市場は極度の恐怖！買い場で間違いなし！みんなが逃げ出している超バーゲンセールです。"
     elif score <= 44: desc = "市場は恐怖モードに突入中。弱気なムードが漂っています。"
@@ -225,17 +241,18 @@ def get_fgi_bubble(force_test=False):
     elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
     else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
-    idx = 0
-    if score <= 10: idx = 0
-    elif score <= 24: idx = 1
-    elif score <= 44: idx = 2
-    elif score <= 55: idx = 3
-    elif score <= 75: idx = 4
-    elif score <= 90: idx = 5
-    else: idx = 6
+    # ★ タイトル領域：「スコア」と「判定」を分離し、判定文字に指定色を適用
+    title_structures = [
+        {"type": "text", "text": f"スコア: 【 {score} / 100 】", "weight": "bold", "size": "xl", "color": "#111111"},
+        {
+            "type": "box", "layout": "horizontal", "margin": "xs",
+            "contents": [
+                {"type": "text", "text": "判定: ", "weight": "bold", "size": "xl", "color": "#111111", "flex": 0},
+                {"type": "text", "text": f"{rating}", "weight": "bold", "size": "xl", "color": current_color, "flex": 1} # ★ メーターと同色を指定
+            ]
+        }
+    ]
 
-    colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
-    
     legend_info = [
         ("濃赤:", " 0〜10 (ここは絶対に買え！！)"),
         ("赤:", " 11〜24 (買い場で間違いなし！)"),
@@ -257,7 +274,7 @@ def get_fgi_bubble(force_test=False):
         height = "16px" if i == idx else "6px"
         bar_boxes.append({
             "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
-            "contents": [] # ★ 空contentsでエラー回避
+            "contents": []
         })
 
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
@@ -307,7 +324,8 @@ def get_fgi_bubble(force_test=False):
         buffett_box
     ]
 
-    return create_flex_bubble("🧭 Fear & Greed Index", color, f"スコア: 【 {score} / 100 】\n判定: {rating}", desc, "ソース: CNN Markets", extra_contents)
+    # ★ カード最上部のヘッダー背景色も現在の判定色(current_color)へ連動
+    return create_flex_bubble("🧭 Fear & Greed Index", current_color, title_structures, desc, "ソース: CNN Markets", extra_contents)
 
 # ==========================================
 # 5. カルーセル一括送信処理
