@@ -117,7 +117,7 @@ def get_sq_bubble(dt_jst, force_test=False):
     return create_flex_bubble(header, color, title, desc, "※SQ算出にかかわる板の急変にご注意ください。")
 
 def get_margin_bubble(force_test=False):
-    latest_date, latest_value = "2026/09/04", -11.50 # テスト用ダミーデータ
+    latest_date, latest_value = "2026/09/04", -11.50
     if not force_test:
         try:
             res = requests.get("https://www.traders.co.jp/margin_derivatives/margin_transition", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -207,7 +207,7 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_mufg_market_bubble(dt_jst, force_test=False):
-    """三菱UFJモルガン・スタンレー証券『本日の株式市況』の取得・要約（ゆらぎ制御付き）"""
+    """実際のHTML構造に最適化したMUFG『本日の株式市況』スクレイピング"""
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
@@ -216,7 +216,8 @@ def get_mufg_market_bubble(dt_jst, force_test=False):
 
     summary_text = ""
     today_md_slash = dt_jst.strftime('%m/%d')
-    today_md_kanji = f"{dt_jst.month}月{dt_jst.day}日"
+    today_day_half = f"{dt_jst.day}日"
+    today_day_full = chr(ord('０') + dt_jst.day // 10) + chr(ord('０') + dt_jst.day % 10) + "日" if dt_jst.day >= 10 else chr(ord('０') + dt_jst.day) + "日"
 
     if force_test:
         summary_text = (
@@ -233,16 +234,19 @@ def get_mufg_market_bubble(dt_jst, force_test=False):
             res.encoding = res.apparent_encoding or "utf-8"
             soup = BeautifulSoup(res.text, "html.parser")
 
+            # 本日の日付チェック（「4日」「４日」「09/04」のいずれかがページに含まれているか）
             page_text = res.text
-            if not (today_md_slash in page_text or today_md_kanji in page_text):
-                print(f"🟢 MUFG市況：本日（{today_md_slash}）の市況データはまだ更新されていません。")
+            if not any(d in page_text for d in [today_md_slash, today_day_half, today_day_full]):
+                print(f"🟢 MUFG市況：本日（{dt_jst.day}日）の市況データはまだ更新されていません。")
                 return None
 
-            main_content = soup.find("div", class_="main-content") or soup.find("main") or soup.find("body")
-            if main_content:
-                paragraphs = [p.get_text(strip=True) for p in main_content.find_all("p") if len(p.get_text(strip=True)) > 20]
-                if paragraphs:
-                    summary_text = "\n\n".join(paragraphs[:2])
+            # HTML要素から <p class="text"> を特定して抽出
+            target_p = soup.find("p", class_="text")
+            if target_p:
+                raw_text = target_p.get_text("\n", strip=True)
+                lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
+                # 先頭の2つの段落を抽出してまとめる
+                summary_text = "\n".join(lines[:4])
 
             if not summary_text:
                 return None
@@ -257,7 +261,7 @@ def get_mufg_market_bubble(dt_jst, force_test=False):
     return create_flex_bubble("🇯🇵 本日の株式市況", "#16A085", title, desc, "ソース: 三菱UFJモルガン・スタンレー証券")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 45, "Neutral" # テスト用ダミーデータ（45は中立）
+    score, rating = 45, "Neutral"
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -272,12 +276,11 @@ def get_fgi_bubble(force_test=False):
     if score <= 10: idx = 0
     elif score <= 24: idx = 1
     elif score <= 44: idx = 2
-    elif score <= 55: idx = 3 # 中立
+    elif score <= 55: idx = 3
     elif score <= 75: idx = 4
     elif score <= 90: idx = 5
     else: idx = 6
 
-    # 7段階のバランス調整カラーパレット
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
     current_color = colors[idx]
 
@@ -334,23 +337,8 @@ def get_fgi_bubble(force_test=False):
             "layout": "horizontal",
             "margin": "xs",
             "contents": [
-                {
-                    "type": "text",
-                    "text": color_label,
-                    "color": colors[i],
-                    "size": "xs",
-                    "weight": "bold",
-                    "flex": 0
-                },
-                {
-                    "type": "text",
-                    "text": text_body,
-                    "color": "#111111",
-                    "size": "xs",
-                    "weight": "bold" if is_current else "regular",
-                    "flex": 1,
-                    "wrap": True
-                }
+                {"type": "text", "text": color_label, "color": colors[i], "size": "xs", "weight": "bold", "flex": 0},
+                {"type": "text", "text": text_body, "color": "#111111", "size": "xs", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
             ]
         })
 
@@ -434,7 +422,7 @@ def main():
         bubbles.append(get_anomaly_bubble(now_jst, force_test=True))
         bubbles.append(get_fomc_bubble(now_jst, force_test=True))
         bubbles.append(get_gmo_bubble(force_test=True))
-        bubbles.append(get_mufg_market_bubble(now_jst, force_test=True)) # ★ MUFG市況要約カードを追加
+        bubbles.append(get_mufg_market_bubble(now_jst, force_test=True))
         bubbles.append(get_fgi_bubble(force_test=True))
         
         bubbles = [b for b in bubbles if b is not None]
@@ -445,17 +433,15 @@ def main():
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
-    if today_wd == 5: return # 土曜スキップ
+    if today_wd == 5: return
 
     if today_wd == 6:
-        # 日曜報告
         b_margin = get_margin_bubble()
         b_fgi = get_fgi_bubble()
         if b_margin: bubbles.append(b_margin)
         if b_fgi: bubbles.append(b_fgi)
 
     elif now_hour == 8:
-        # 朝の部 (JST 朝8:00)
         if not is_japanese_holiday(now_jst):
             b_sq = get_sq_bubble(now_jst)
             b_margin = get_margin_bubble()
@@ -465,7 +451,6 @@ def main():
             if b_anomaly: bubbles.append(b_anomaly)
 
     else:
-        # 夕方・夜の部
         if not is_japanese_holiday(now_jst):
             b_mufg = get_mufg_market_bubble(now_jst)
             if b_mufg: bubbles.append(b_mufg)
