@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 # 1. 設定情報
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
-LINE_USER_ID = os.environ.get("LINE_USER_ID")  # ★ NEW: 開発者の個別テスト用ID
+LINE_USER_ID = os.environ.get("LINE_USER_ID")  # ★ 開発者の個別テスト用ID
 
 # ★ テスト実行用安全スイッチ（Trueの時は開発者のみにPush通知する）
 DEBUG_MODE = True 
@@ -230,7 +230,9 @@ def check_and_send_anomaly_notice(dt_jst):
 
     msg_body = None
 
-    # 月の「第1営業日」かどうかの判定
+    # ---------------------------------------------
+    # A. 月初（第1営業日）のアノマリー判定
+    # ---------------------------------------------
     is_first_business_day = True
     if dt_jst.weekday() >= 5 or is_japanese_holiday(dt_jst):
         is_first_business_day = False
@@ -241,7 +243,6 @@ def check_and_send_anomaly_notice(dt_jst):
                 is_first_business_day = False
                 break
 
-    # 【月初（第1営業日）のアノマリー】
     if is_first_business_day:
         if month == 1:
             msg_body = "🎍 【アノマリー：1月効果 (January Effect)】\n昨年末の節税売りの反動や新規資金流入により、特に中小型株が上昇しやすい傾向があります！大発会以降の動きに注目です。"
@@ -253,10 +254,24 @@ def check_and_send_anomaly_notice(dt_jst):
             msg_body = "🏄 【アノマリー：サマーラリー】\n7月はボーナス資金の流入などで一時的に相場が上昇しやすく、強含みしやすい傾向があります。"
         elif month == 8:
             msg_body = "🌻 【アノマリー警戒：夏枯れ相場】\n8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。突発的な急落（ボラティリティ増大）に十分注意してください。"
-        elif month == 9:
-            msg_body = "🍂 【アノマリー警戒：9月効果 (September Effect)】\nレイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も相場が軟調になりやすい警戒月です。"
 
-    # 【日付固定の中旬・月末アノマリー】
+    # ---------------------------------------------
+    # B. 特殊日（レイバーデイ明け）のアノマリー判定
+    # ---------------------------------------------
+    if month == 9:
+        # 9月の第1月曜日（レイバーデイ）の翌日（火曜日）を計算する
+        first_day_of_sept = date(today_date.year, 9, 1)
+        # 0=月曜日。9月1日の曜日から最初の月曜日までの日数を計算
+        days_to_monday = (0 - first_day_of_sept.weekday()) % 7
+        labor_day = first_day_of_sept + timedelta(days=days_to_monday)
+        post_labor_day = labor_day + timedelta(days=1)
+        
+        if today_date == post_labor_day:
+            msg_body = "🍂 【アノマリー警戒：9月効果 (September Effect)】\nレイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も相場が軟調になりやすい警戒時期のスタートです。"
+
+    # ---------------------------------------------
+    # C. 日付固定のアノマリー判定
+    # ---------------------------------------------
     if month == 3 and day == 15:
         msg_body = "🌸 【アノマリー：期末の需給・お化粧買い】\n3月末に向けて、配当権利取りや機関投資家による決算対策の買いが入りやすく、底堅い展開になりやすい時期です。"
     elif month == 10 and day == 28:
@@ -446,8 +461,8 @@ def check_margin_evaluation():
             print(f"✅ 信用評価損益率 取得成功！ 最新日付: {latest_date}, 値: {latest_value}%")
 
             jst = timezone(timedelta(hours=9))
-            now_jst = datetime.now(jst)
-            is_sunday = (now_jst.weekday() == 6)
+            now_test = datetime.now(jst)
+            is_sunday = (now_test.weekday() == 6)
             is_danger = latest_value <= THRES_DANGER
             is_recovery = latest_value >= THRES_RECOVERY
 
@@ -567,18 +582,17 @@ def check_gaikaex_economy_index():
 # ==========================================
 def main():
     jst = timezone(timedelta(hours=9))
-    now_jst = datetime.now(jst)
     
-    # ★ 動作テスト用（朝5時でも強制的に「平日の朝8時」と認識させてアノマリー等を実行させる）
-    # テストが終わったら、以下の2行をコメントアウトするか削除してください。
-    today_wd = 1  # 1は火曜日のため平日扱いになる
-    now_hour = 8  # 強制的に朝8時のルートを通す
+    # ★ テスト用: 実行時刻を「2026年9月8日（火）朝8:00 (レイバーデイ明け)」に偽装
+    now_jst = datetime(2026, 9, 8, 8, 0, tzinfo=jst)
     
-    # 本番用（テスト完了後にこちらを生かします）
-    # today_wd = now_jst.weekday()
-    # now_hour = now_jst.hour
+    # 本番環境に戻す際は、上の1行を消して以下の1行のコメントアウトを外してください。
+    # now_jst = datetime.now(jst)
+    
+    today_wd = now_jst.weekday()
+    now_hour = now_jst.hour
 
-    print(f"🤖 チェック開始... (テスト実行: 曜日{today_wd}, 時刻{now_hour}時扱いで実行)")
+    print(f"🤖 チェック開始... (テスト実行: 偽装日時 {now_jst.strftime('%Y/%m/%d %H:%M')} 扱いで実行)")
 
     if today_wd == 5:
         print("☕ 土曜日のためスキップ")
