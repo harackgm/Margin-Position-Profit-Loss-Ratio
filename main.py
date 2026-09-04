@@ -6,9 +6,12 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==========================================
-# 1. 設定情報（LINE アクセストークン）
+# 1. 設定情報
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
+
+# ★ テスト実行用安全スイッチ（Trueの時はLINEに通知せずログ出力のみ行う）
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -216,7 +219,7 @@ def check_and_send_fomc_notice(dt_jst):
         print("🟢 今夜はFOMC発表の前夜ではありません。")
 
 # ==========================================
-# 4.5 季節的アノマリー判定・通知機能 (NEW!)
+# 4.5 季節的アノマリー判定・通知機能
 # ==========================================
 def check_and_send_anomaly_notice(dt_jst):
     """特定の日付や営業日に季節的アノマリー（相場の経験則）を通知する"""
@@ -226,7 +229,7 @@ def check_and_send_anomaly_notice(dt_jst):
 
     msg_body = None
 
-    # 月の「第1営業日」かどうかの判定（土日・祝日をスキップして確実に拾うため）
+    # 月の「第1営業日」かどうかの判定（土日・祝日をスキップして確実に拾う）
     is_first_business_day = True
     if dt_jst.weekday() >= 5 or is_japanese_holiday(dt_jst):
         is_first_business_day = False
@@ -249,6 +252,8 @@ def check_and_send_anomaly_notice(dt_jst):
             msg_body = "🏄 【アノマリー：サマーラリー】\n7月はボーナス資金の流入などで一時的に相場が上昇しやすく、強含みしやすい傾向があります。"
         elif month == 8:
             msg_body = "🌻 【アノマリー警戒：夏枯れ相場】\n8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。突発的な急落（ボラティリティ増大）に十分注意してください。"
+        elif month == 9: # ★NEW: 9月効果
+            msg_body = "🍂 【アノマリー警戒：9月効果 (September Effect)】\nレイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も相場が軟調になりやすい警戒月です。"
 
     # 【日付固定の中旬・月末アノマリー】 (平日稼働時に該当日であれば通知)
     if month == 3 and day == 15:
@@ -277,6 +282,15 @@ def check_and_send_anomaly_notice(dt_jst):
 # ==========================================
 def send_line_message(text):
     """登録者全員へブロードキャスト一括送信"""
+    
+    # ★ テスト・デバッグモードの場合は送信スキップ
+    if DEBUG_MODE:
+        print("\n🛠️ 【DEBUG_MODE: ON】 LINEへの実際の送信をスキップしました。")
+        print("▼▼ 送信予定メッセージ ▼▼\n")
+        print(text)
+        print("\n▲▲▲▲▲▲▲▲▲▲▲▲▲▲\n")
+        return
+
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
@@ -524,6 +538,11 @@ def check_gaikaex_economy_index():
 
         print("-" * 30)
         if target_events:
+            # ★大量通知ストッパー（MAX_LIMIT）
+            if len(target_events) > 10:
+                print(f"⚠️ 検知異常: 本日の★★★指標が {len(target_events)} 件と異常値です。誤配信を防ぐため通知をスキップします。")
+                return
+
             print(f"✅ 本日発表の米国★★★指標を {len(target_events)} 件発見しました！")
             title = f"🇺🇸 【GMO証券：本日発表の米国★★★ 注目指標】\n📅 {today.strftime('%Y/%m/%d')}"
             msg = f"{title}\n\n" + "\n".join(target_events) + f"\n\n📊 経済指標カレンダー:\n{gaikaex_url}"
@@ -544,6 +563,10 @@ def main():
     
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
+
+    # ★ 強制的に朝8時のルート、または夜21時のルートをテストしたい場合は以下のコメントを外して数値を固定します。
+    # today_wd = 1  # 1:火曜日 (平日扱い)
+    # now_hour = 8  # 8:朝の部, 21:夜の部
 
     print(f"🤖 チェック開始... (曜日: {today_wd}, 時刻: {now_hour}時)")
 
@@ -566,7 +589,7 @@ def main():
             print("---")
             check_margin_evaluation()
             print("---")
-            check_and_send_anomaly_notice(now_jst)  # ← NEW: アノマリーチェックをここに追加
+            check_and_send_anomaly_notice(now_jst)
 
     else:
         if is_us_holiday(now_jst):
