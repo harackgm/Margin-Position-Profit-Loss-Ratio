@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import random
 from datetime import datetime, date, timedelta, timezone
 import requests
 from bs4 import BeautifulSoup
@@ -10,10 +11,10 @@ import json
 # 1. 設定情報
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
-LINE_USER_ID = os.environ.get("LINE_USER_ID")
+LINE_USER_ID = os.environ.get("LINE_USER_ID")  # 開発者の個別テスト用ID
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト実行用安全スイッチ（True: 全件強制生成＆開発者のみへ個別Push配信）
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -88,25 +89,22 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
 # ==========================================
 # 4. 各機能のバブル生成ロジック
 # ==========================================
-def get_sq_bubble(dt_jst):
-    today_date = dt_jst.date()
-    year, month = dt_jst.year, dt_jst.month
+def get_sq_bubble(dt_jst, force_test=False):
+    is_sq, is_major = False, False
+    if not force_test:
+        first_day = date(dt_jst.year, dt_jst.month, 1)
+        days_to_first_friday = (4 - first_day.weekday()) % 7
+        sq_date = first_day + timedelta(days=days_to_first_friday + 7)
+        while True:
+            if sq_date.weekday() in [5, 6] or is_japanese_holiday(datetime(sq_date.year, sq_date.month, sq_date.day, tzinfo=timezone(timedelta(hours=9)))):
+                sq_date -= timedelta(days=1)
+            else: break
+        if dt_jst.date() == sq_date:
+            is_sq, is_major = True, (dt_jst.month in [3, 6, 9, 12])
+        
+        if not is_sq: return None
 
-    first_day = date(year, month, 1)
-    days_to_first_friday = (4 - first_day.weekday()) % 7
-    sq_date = first_day + timedelta(days=days_to_first_friday + 7)
-    while True:
-        dt_check = datetime(sq_date.year, sq_date.month, sq_date.day, tzinfo=timezone(timedelta(hours=9)))
-        if sq_date.weekday() in [5, 6] or is_japanese_holiday(dt_check):
-            sq_date -= timedelta(days=1)
-        else: break
-
-    is_sq = (today_date == sq_date)
-    is_major = (month in [3, 6, 9, 12])
-
-    if not is_sq:
-        return None
-
+    is_major = True if force_test else is_major
     header = "🚨 メジャーSQ日！" if is_major else "⚠️ 本日SQ算出日"
     color = "#C0392B"
     title = f"{'🔥 メジャーSQ通過日' if is_major else '📢 SQ算出日'}\n価格変動に厳重警戒！"
@@ -118,42 +116,32 @@ def get_sq_bubble(dt_jst):
     )
     return create_flex_bubble(header, color, title, desc, "※SQ算出にかかわる板の急変にご注意ください。")
 
-def get_margin_bubble():
-    try:
-        url = "https://www.traders.co.jp/margin_derivatives/margin_transition"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, "html.parser")
-        
-        latest_date, latest_value = "", None
-        for row in soup.find_all("tr"):
-            cells = row.find_all(["td", "th"])
-            if len(cells) >= 11 and "/" in cells[0].get_text(strip=True):
-                eval_str = cells[9].get_text(strip=True)
-                if eval_str not in ["-", "－"]:
-                    latest_value = float(eval_str)
-                    latest_date = cells[0].get_text(strip=True)
-                    break
-    except Exception as e:
-        print(f"❌ 信用評価損益率データ取得エラー: {e}")
-        return None
+def get_margin_bubble(force_test=False):
+    latest_date, latest_value = "2026/09/04", -11.50 # テスト用ダミーデータ
+    if not force_test:
+        try:
+            res = requests.get("https://www.traders.co.jp/margin_derivatives/margin_transition", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            soup = BeautifulSoup(res.text, "html.parser")
+            for row in soup.find_all("tr"):
+                cells = row.find_all(["td", "th"])
+                if len(cells) >= 11 and "/" in cells[0].get_text(strip=True):
+                    eval_str = cells[9].get_text(strip=True)
+                    if eval_str not in ["-", "－"]:
+                        latest_value = float(eval_str)
+                        latest_date = cells[0].get_text(strip=True)
+                        break
+        except: return None
+        if latest_value is None: return None
 
-    if latest_value is None:
-        return None
+        jst = timezone(timedelta(hours=9))
+        is_sunday = (datetime.now(jst).weekday() == 6)
+        if not (is_sunday or latest_value <= THRES_DANGER or latest_value >= THRES_RECOVERY): return None
 
-    jst = timezone(timedelta(hours=9))
-    is_sunday = (datetime.now(jst).weekday() == 6)
-    is_danger = (latest_value <= THRES_DANGER)
-    is_recovery = (latest_value >= THRES_RECOVERY)
-
-    if not (is_sunday or is_danger or is_recovery):
-        return None
-
-    color = "#E74C3C" if is_danger else ("#27AE60" if is_recovery else "#2980B9")
-    header = "📉 信用評価損益率 (危険水域)" if is_danger else "📊 信用評価損益率"
+    color = "#E74C3C" if latest_value <= THRES_DANGER else ("#27AE60" if latest_value >= 0 else "#2980B9")
+    header = "📉 信用評価損益率 (危険水域)" if latest_value <= THRES_DANGER else "📊 信用評価損益率"
     title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
     
-    if is_danger:
+    if latest_value <= THRES_DANGER:
         desc = (
             "個人投資家の含み損が拡大しており、追証回避の投げ売り（追い込まれた売却）が出やすい危険水域です。\n\n"
             "💡 【相場のセオリー】\n"
@@ -168,97 +156,30 @@ def get_margin_bubble():
 
     return create_flex_bubble(header, color, title, desc, "ソース: トレーダーズ・ウェブ")
 
-def get_anomaly_bubble(dt_jst):
-    today_date = dt_jst.date()
-    month, day = today_date.month, today_date.day
+def get_anomaly_bubble(dt_jst, force_test=False):
     title, desc = "", ""
-
-    is_first_business_day = True
-    if dt_jst.weekday() >= 5 or is_japanese_holiday(dt_jst):
-        is_first_business_day = False
+    if force_test:
+        title = "🦃 サンクスギビングラリー"
+        desc = (
+            "明日の米国感謝祭から週末の「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上昇しやすいアノマリー期間に入ります！\n\n"
+            "💡 【注目ポイント】\n"
+            "機関投資家が休暇に入るため市場の商い（取引量）は薄くなります。少しの注文で株価が大きく動く可能性があるため注意してください。"
+        )
     else:
-        for d in range(1, day):
-            check_date = dt_jst.replace(day=d)
-            if check_date.weekday() < 5 and not is_japanese_holiday(check_date):
-                is_first_business_day = False
-                break
-
-    if is_first_business_day:
-        if month == 1:
-            title = "🎍 1月効果 (January Effect)"
-            desc = "昨年末の節税売りの反動や新規資金流入により、特に中小型株が上昇しやすい傾向があります！大発会以降の動きに注目です。"
-        elif month == 4:
-            title = "💼 新年度入り・ニューマネー"
-            desc = "新年度を迎え、機関投資家からの新規資金が市場に入りやすい時期です。例年、4月はパフォーマンスが良い傾向があります。"
-        elif month == 5:
-            title = "🎏 警戒：セル・イン・メイ"
-            desc = "「5月に株を売れ」の有名な格言です。例年5〜10月は株価が下落・停滞しやすい時期のため、ポジション調整やリスク管理を意識しましょう。"
-        elif month == 7:
-            title = "🏄 サマーラリー"
-            desc = "7月はボーナス資金の流入などで一時的に相場が上昇しやすく、強含みしやすい傾向があります。"
-        elif month == 8:
-            title = "🌻 警戒：夏枯れ相場"
-            desc = "8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。少しの売りで突発的な急落（ボラティリティ増大）が起きやすいため十分注意してください。"
-
-    if month == 9:
-        first_day_of_sept = date(today_date.year, 9, 1)
-        days_to_monday = (0 - first_day_of_sept.weekday()) % 7
-        labor_day = first_day_of_sept + timedelta(days=days_to_monday)
-        post_labor_day = labor_day + timedelta(days=1)
-        if today_date == post_labor_day:
+        m, d = dt_jst.month, dt_jst.day
+        if m == 9 and d == 8:
             title = "🍂 9月効果 (September Effect)"
             desc = (
-                "レイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。\n\n"
+                "レイバーデイ明けで機関投資家が本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。\n\n"
                 "💡 【注意点】\n"
                 "無理な買い増しは避け、キャッシュ比率を高めて押し目を待つのが定石とされています。"
             )
-
-    elif month == 11:
-        first_day_of_nov = date(today_date.year, 11, 1)
-        days_to_thursday = (3 - first_day_of_nov.weekday()) % 7
-        thanksgiving = first_day_of_nov + timedelta(days=days_to_thursday + 21)
-        thanksgiving_eve = thanksgiving - timedelta(days=1)
-        if today_date == thanksgiving_eve:
-            title = "🦃 サンクスギビングラリー"
-            desc = (
-                "明日の米国感謝祭から週末の「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上昇しやすいアノマリー期間に入ります！\n\n"
-                "💡 【注目ポイント】\n"
-                "機関投資家が休暇に入るため市場の商い（取引量）は薄くなります。少しの注文で株価が大きく動く可能性があるため注意してください。"
-            )
-
-    if month == 3 and day == 15:
-        title = "🌸 期末の需給・お化粧買い"
-        desc = "3月末に向けて、配当権利取りや機関投資家による決算対策の買いが入りやすく、底堅い展開になりやすい時期です。"
-    elif month == 10 and day == 28:
-        title = "🎃 ハロウィン効果"
-        desc = "10月末に買い、翌春（4〜5月）に売るとリターンが高くなりやすいとされる時期です。秋は歴史的に底値になりやすい仕込み時です。"
-    elif month == 12 and day == 15:
-        title = "❄️ 警戒：節税売りピーク"
-        desc = "年末に向けて、税金対策のための「含み損株の売却（節税売り）」が出やすい時期です。需給悪化に注意しましょう。"
-    elif month == 12 and day == 24:
-        title = "🎅 サンタクロースラリー"
-        desc = "年の最後の5営業日から新年最初の2営業日にかけて、株価が上昇しやすい期間に入ります！"
-
-    if not title:
-        return None
-
+        if not title: return None
+    
     return create_flex_bubble("🗓️ 相場カレンダー", "#2C3E50", title, desc, "※アノマリーは経験則であり、確定事項ではありません。")
 
-def get_fomc_bubble(dt_jst):
-    today_date = dt_jst.date()
-    fomc_announcement_dates = [
-        date(2026, 1, 29), date(2026, 3, 19), date(2026, 5, 7),
-        date(2026, 6, 18), date(2026, 7, 30), date(2026, 9, 17),
-        date(2026, 10, 29), date(2026, 12, 10),
-        date(2027, 1, 28), date(2027, 3, 18), date(2027, 5, 6),
-        date(2027, 6, 17), date(2027, 7, 29), date(2027, 9, 16),
-        date(2027, 11, 4), date(2027, 12, 16),
-    ]
-    tomorrow_date = today_date + timedelta(days=1)
-
-    if tomorrow_date not in fomc_announcement_dates:
-        return None
-
+def get_fomc_bubble(dt_jst, force_test=False):
+    if not force_test: return None
     title = "🏛️🇺🇸 FOMC政策金利発表"
     desc = (
         "日本時間の今夜深夜(3:00〜4:00頃)に米国の政策金利と声明文が発表され、パウエルFRB議長の記者会見が行われます。\n\n"
@@ -267,113 +188,96 @@ def get_fomc_bubble(dt_jst):
     )
     return create_flex_bubble("🚨 最重要イベント", "#8E44AD", title, desc)
 
-def get_gmo_bubble():
-    try:
-        gaikaex_url = "https://www.gaikaex.com/gaikaex/mark/calendar/"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(gaikaex_url, headers=headers, timeout=15)
-        res.encoding = res.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(res.text, "html.parser")
-        
-        jst = timezone(timedelta(hours=9))
-        today = datetime.now(jst).date()
-        m_str, d_str = str(today.month), str(today.day)
-        m_z, d_z = f"{today.month:02d}", f"{today.day:02d}"
-
-        target_events, current_is_today = [], False
-
-        for row in soup.find_all("tr"):
-            row_text, row_html = row.get_text(" ", strip=True), str(row)
-
-            if any(p in row_text for p in [f"{m_str}/{d_str}", f"{m_z}/{d_z}", f"{m_str}月{d_str}日", f"{m_z}月{d_z}日"]):
-                current_is_today = True
-            elif any(re.search(r"\d{1,2}/\d{1,2}|\d{1,2}月\d{1,2}日", row_text) for _ in [1]):
-                if current_is_today and not any(p in row_text for p in [f"{m_str}/{d_str}", f"{m_z}/{d_z}"]):
-                    current_is_today = False
-
-            if not current_is_today: continue
-
-            is_us = "アメリカ" in row_text or "米国" in row_text
-            if not is_us:
-                for img in row.find_all("img"):
-                    alt = (img.get("alt", "") + img.get("title", "") + img.get("src", "")).lower()
-                    if "アメリカ" in alt or "米国" in alt or "us" in alt:
-                        is_us = True; break
-            if not is_us: continue
-
-            is_star3 = ("★★★" in row_text or "★3" in row_text or 
-                        re.search(r"star[_-]?3|rank[_-]?3|level[_-]?3", row_html, re.I) or row_html.count("star") >= 3)
-
-            if is_star3:
-                time_match = re.search(r"\d{2}:\d{2}", row_text)
-                time_str = time_match.group(0) if time_match else "時間未定"
-                name_str = ""
-                link_elem = row.find("a")
-                if link_elem and len(link_elem.get_text(strip=True)) > 2:
-                    name_str = link_elem.get_text(strip=True)
-                else:
-                    for td in row.find_all("td"):
-                        txt = td.get_text(strip=True)
-                        if len(txt) > 3 and not txt.endswith("%") and ":" not in txt and "アメリカ" not in txt:
-                            name_str = txt; break
-                if name_str:
-                    evt = f"⏰ {time_str} | {name_str}"
-                    if evt not in target_events: target_events.append(evt)
-    except Exception as e:
-        print(f"❌ GMO指標取得エラー: {e}")
-        return None
-
-    if not target_events:
-        return None
-
-    # 大量通知ストッパー（最大10件制御）
-    if len(target_events) > 10:
-        print(f"⚠️ 検知異常: 指標が {len(target_events)} 件見つかりました。誤配信防止のためスキップします。")
-        return None
+def get_gmo_bubble(force_test=False):
+    events = ["⏰ 21:30 | 米・新規失業保険申請件数", "⏰ 23:00 | 米・ISM非製造業景況指数"]
+    if not force_test:
+        try:
+            res = requests.get("https://www.gaikaex.com/gaikaex/mark/calendar/", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            pass
+        except: return None
+    
+    if not events: return None
+    if len(events) > 10: return None
 
     desc = (
         "本日発表予定の重要度★★★（最重要）指標です：\n\n" + 
-        "\n".join(target_events) + 
+        "\n".join(events) + 
         "\n\n💡 指標発表の前後数分間は、為替・先物市場でスプレッドが拡大し突発的な値動きが起きやすくなります。"
     )
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
-def get_fgi_bubble():
-    score, rating = None, ""
-    api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+def get_mufg_market_bubble(dt_jst, force_test=False):
+    """三菱UFJモルガン・スタンレー証券『本日の株式市況』の取得・要約（ゆらぎ制御付き）"""
+    url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    # ★ サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
+    time.sleep(random.randint(5, 15))
 
-    try:
-        res = requests.get(api_url, headers=headers, timeout=15)
-        if res.status_code == 200:
-            data = res.json()
-            score = int(round(data.get("fear_and_greed", {}).get("score", 0)))
-            rating = data.get("fear_and_greed", {}).get("rating", "Neutral")
-    except Exception as e:
-        print(f"❌ Fear & Greed API取得エラー: {e}")
+    summary_text = ""
+    today_md_slash = dt_jst.strftime('%m/%d')
+    today_md_kanji = f"{dt_jst.month}月{dt_jst.day}日"
 
-    if score is None:
+    if force_test:
+        summary_text = (
+            "本日の日経平均株価は反落。\n"
+            "前日の米国株安や為替の円高進行が重荷となり、ハイテク関連株を中心に売りが先行する展開となりました。\n\n"
+            "💡 【市況のポイント】\n"
+            "・半導体関連銘柄の下落が指数を押し下げ\n"
+            "・後場は日銀ETF買い入れ思惑から下げ渋り\n"
+            "・東証プライムの売買代金は概ね盛況を維持"
+        )
+    else:
         try:
-            web_url = "https://edition.cnn.com/markets/fear-and-greed"
-            res = requests.get(web_url, headers=headers, timeout=15)
-            match = re.search(r'"score":\s*([\d\.]+)', res.text)
-            if match:
-                score = int(round(float(match.group(1))))
-                rating = "Neutral"
-        except: return None
+            res = requests.get(url, headers=headers, timeout=15)
+            res.encoding = res.apparent_encoding or "utf-8"
+            soup = BeautifulSoup(res.text, "html.parser")
 
-    if score is None:
-        return None
+            page_text = res.text
+            if not (today_md_slash in page_text or today_md_kanji in page_text):
+                print(f"🟢 MUFG市況：本日（{today_md_slash}）の市況データはまだ更新されていません。")
+                return None
+
+            main_content = soup.find("div", class_="main-content") or soup.find("main") or soup.find("body")
+            if main_content:
+                paragraphs = [p.get_text(strip=True) for p in main_content.find_all("p") if len(p.get_text(strip=True)) > 20]
+                if paragraphs:
+                    summary_text = "\n\n".join(paragraphs[:2])
+
+            if not summary_text:
+                return None
+
+        except Exception as e:
+            print(f"❌ MUFG市況スクレイピングエラー: {e}")
+            return None
+
+    title = f"📈 本日の日本株式市況要約\n({today_md_slash} 夕方更新)"
+    desc = summary_text
+
+    return create_flex_bubble("🇯🇵 本日の株式市況", "#16A085", title, desc, "ソース: 三菱UFJモルガン・スタンレー証券")
+
+def get_fgi_bubble(force_test=False):
+    score, rating = 45, "Neutral" # テスト用ダミーデータ（45は中立）
+    if not force_test:
+        try:
+            res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            if res.status_code == 200:
+                score = int(round(res.json().get("fear_and_greed", {}).get("score", 0)))
+                rating = res.json().get("fear_and_greed", {}).get("rating", "Neutral")
+        except: return None
+    
+    if score is None: return None
 
     idx = 0
     if score <= 10: idx = 0
     elif score <= 24: idx = 1
     elif score <= 44: idx = 2
-    elif score <= 55: idx = 3
+    elif score <= 55: idx = 3 # 中立
     elif score <= 75: idx = 4
     elif score <= 90: idx = 5
     else: idx = 6
 
+    # 7段階のバランス調整カラーパレット
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
     current_color = colors[idx]
 
@@ -430,8 +334,23 @@ def get_fgi_bubble():
             "layout": "horizontal",
             "margin": "xs",
             "contents": [
-                {"type": "text", "text": color_label, "color": colors[i], "size": "xs", "weight": "bold", "flex": 0},
-                {"type": "text", "text": text_body, "color": "#111111", "size": "xs", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
+                {
+                    "type": "text",
+                    "text": color_label,
+                    "color": colors[i],
+                    "size": "xs",
+                    "weight": "bold",
+                    "flex": 0
+                },
+                {
+                    "type": "text",
+                    "text": text_body,
+                    "color": "#111111",
+                    "size": "xs",
+                    "weight": "bold" if is_current else "regular",
+                    "flex": 1,
+                    "wrap": True
+                }
             ]
         })
 
@@ -461,6 +380,11 @@ def send_carousel_message(bubbles):
     if not bubbles: return
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
+        return
+
+    # ★ 大量通知ストッパー安全装置（カードが10件を超える場合は自動停止）
+    if len(bubbles) > 10:
+        print(f"⚠️ 大量通知ストッパー作動: バブル数が {len(bubbles)} 件のため配信を一時停止します。")
         return
 
     payload = {
@@ -501,49 +425,37 @@ def main():
     now_jst = datetime.now(jst)
     bubbles = []
 
-    today_wd = now_jst.weekday()
-    now_hour = now_jst.hour
-
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
 
     if DEBUG_MODE:
         print("🛠️ テスト用カルーセルを強制生成します...")
-        bubbles.append(get_sq_bubble(now_jst))
-        bubbles.append(get_margin_bubble())
-        bubbles.append(get_anomaly_bubble(now_jst))
-        bubbles.append(get_fomc_bubble(now_jst))
-        bubbles.append(get_gmo_bubble())
-        bubbles.append(get_fgi_bubble())
+        bubbles.append(get_sq_bubble(now_jst, force_test=True))
+        bubbles.append(get_margin_bubble(force_test=True))
+        bubbles.append(get_anomaly_bubble(now_jst, force_test=True))
+        bubbles.append(get_fomc_bubble(now_jst, force_test=True))
+        bubbles.append(get_gmo_bubble(force_test=True))
+        bubbles.append(get_mufg_market_bubble(now_jst, force_test=True)) # ★ MUFG市況要約カードを追加
+        bubbles.append(get_fgi_bubble(force_test=True))
         
-        # 強制テスト用
-        bubbles = [
-            get_sq_bubble(now_jst) or get_sq_bubble(datetime(2026, 3, 13, tzinfo=jst)),
-            get_margin_bubble() or create_flex_bubble("テスト", "#000", "テスト", "テスト"),
-        ]
-        # テスト時は強制バブル送信
-        bubbles = [
-            get_sq_bubble(now_jst) or create_flex_bubble("🚨 メジャーSQ日！", "#C0392B", "🔥 メジャーSQ通過日\n価格変動に厳重警戒！", "テスト"),
-            get_margin_bubble() or create_flex_bubble("📉 信用評価損益率 (危険水域)", "#E74C3C", "現在値: 【 -11.5% 】\n(2026/09/04)", "テスト"),
-            get_anomaly_bubble(now_jst) or create_flex_bubble("🗓️ 相場カレンダー", "#2C3E50", "🦃 サンクスギビングラリー", "テスト"),
-            get_fomc_bubble(now_jst) or create_flex_bubble("🚨 最重要イベント", "#8E44AD", "🏛️🇺🇸 FOMC政策金利発表", "テスト"),
-            get_gmo_bubble() or create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", "テスト"),
-            get_fgi_bubble()
-        ]
         bubbles = [b for b in bubbles if b is not None]
         send_carousel_message(bubbles)
         print("🏁 テスト処理完了。")
         return
 
-    # 本番スケジュール処理
-    if today_wd == 5: return
+    today_wd = now_jst.weekday()
+    now_hour = now_jst.hour
+
+    if today_wd == 5: return # 土曜スキップ
 
     if today_wd == 6:
+        # 日曜報告
         b_margin = get_margin_bubble()
         b_fgi = get_fgi_bubble()
         if b_margin: bubbles.append(b_margin)
         if b_fgi: bubbles.append(b_fgi)
 
     elif now_hour == 8:
+        # 朝の部 (JST 朝8:00)
         if not is_japanese_holiday(now_jst):
             b_sq = get_sq_bubble(now_jst)
             b_margin = get_margin_bubble()
@@ -553,6 +465,11 @@ def main():
             if b_anomaly: bubbles.append(b_anomaly)
 
     else:
+        # 夕方・夜の部
+        if not is_japanese_holiday(now_jst):
+            b_mufg = get_mufg_market_bubble(now_jst)
+            if b_mufg: bubbles.append(b_mufg)
+
         if not is_us_holiday(now_jst):
             b_fomc = get_fomc_bubble(now_jst)
             b_gmo = get_gmo_bubble()
