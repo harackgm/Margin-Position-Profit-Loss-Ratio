@@ -256,18 +256,27 @@ def check_and_send_anomaly_notice(dt_jst):
             msg_body = "🌻 【アノマリー警戒：夏枯れ相場】\n8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。突発的な急落（ボラティリティ増大）に十分注意してください。"
 
     # ---------------------------------------------
-    # B. 特殊日（レイバーデイ明け）のアノマリー判定
+    # B. 特殊日（変動祝日・イベント）のアノマリー判定
     # ---------------------------------------------
     if month == 9:
-        # 9月の第1月曜日（レイバーデイ）の翌日（火曜日）を計算する
+        # 9月の第1月曜日（レイバーデイ）の翌日（火曜日）
         first_day_of_sept = date(today_date.year, 9, 1)
-        # 0=月曜日。9月1日の曜日から最初の月曜日までの日数を計算
         days_to_monday = (0 - first_day_of_sept.weekday()) % 7
         labor_day = first_day_of_sept + timedelta(days=days_to_monday)
         post_labor_day = labor_day + timedelta(days=1)
         
         if today_date == post_labor_day:
             msg_body = "🍂 【アノマリー警戒：9月効果 (September Effect)】\nレイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。"
+
+    elif month == 11:
+        # 11月の第4木曜日（サンクスギビング）の前日（水曜日）
+        first_day_of_nov = date(today_date.year, 11, 1)
+        days_to_thursday = (3 - first_day_of_nov.weekday()) % 7
+        thanksgiving = first_day_of_nov + timedelta(days=days_to_thursday + 21)
+        thanksgiving_eve = thanksgiving - timedelta(days=1)
+        
+        if today_date == thanksgiving_eve:
+            msg_body = "🦃 【アノマリー：サンクスギビング・ラリー】\n明日の米国感謝祭から週末の「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間に入ります！市場は祝日モードで商いが薄くなるため、突発的な動きにもご注意ください。"
 
     # ---------------------------------------------
     # C. 日付固定のアノマリー判定
@@ -583,8 +592,8 @@ def check_gaikaex_economy_index():
 def main():
     jst = timezone(timedelta(hours=9))
     
-    # ★ テスト用: 実行時刻を「2026年9月8日（火）朝8:00 (レイバーデイ明け)」に偽装
-    now_jst = datetime(2026, 9, 8, 8, 0, tzinfo=jst)
+    # ★ テスト用: 実行時刻を「2026年11月25日（水）朝8:00 (サンクスギビング前日)」に偽装
+    now_jst = datetime(2026, 11, 25, 8, 0, tzinfo=jst)
     
     # ----------------------------------------------------------------------
     # ⚠️ 【重要: 本番運用への戻し方】
