@@ -207,26 +207,29 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_mufg_market_bubble(dt_jst, force_test=False):
-    """実際のHTML構造に最適化したMUFG『本日の株式市況』スクレイピング"""
+    """MUFG『本日の株式市況』の要約生成（日経平均・TOPIX・売買代金網羅版）"""
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    # ★ サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
+    # サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
     time.sleep(random.randint(5, 15))
 
-    summary_text = ""
     today_md_slash = dt_jst.strftime('%m/%d')
     today_day_half = f"{dt_jst.day}日"
     today_day_full = chr(ord('０') + dt_jst.day // 10) + chr(ord('０') + dt_jst.day % 10) + "日" if dt_jst.day >= 10 else chr(ord('０') + dt_jst.day) + "日"
 
     if force_test:
-        summary_text = (
-            "本日の日経平均株価は反落。\n"
-            "前日の米国株安や為替の円高進行が重荷となり、ハイテク関連株を中心に売りが先行する展開となりました。\n\n"
-            "💡 【市況のポイント】\n"
-            "・半導体関連銘柄の下落が指数を押し下げ\n"
-            "・後場は日銀ETF買い入れ思惑から下げ渋り\n"
-            "・東証プライムの売買代金は概ね盛況を維持"
+        # ★ テスト用：日経平均・TOPIX・売買代金を網羅した詳細要約データ
+        desc = (
+            "【日経平均】\n"
+            "6万5,020円94銭 (＋806円46銭 / ＋1.26%)\n"
+            "米金利低下と米ハイテク株高を受け反発。AI・半導体関連株が指数を牽引し、ソフトバンクG（前日比＋11%）が1銘柄で約470円押し上げました。\n\n"
+            "【TOPIX】\n"
+            "4,103.23 (＋1.19pt)\n"
+            "自動車株は円高進行（1ドル＝155円台前半）が重荷となりましたが、続伸を維持。\n\n"
+            "【市場状況】\n"
+            "・プライム売買代金：概算 8兆3,282億円\n"
+            "・値上がり 788 / 値下がり 712"
         )
     else:
         try:
@@ -234,30 +237,44 @@ def get_mufg_market_bubble(dt_jst, force_test=False):
             res.encoding = res.apparent_encoding or "utf-8"
             soup = BeautifulSoup(res.text, "html.parser")
 
-            # 本日の日付チェック（「4日」「４日」「09/04」のいずれかがページに含まれているか）
             page_text = res.text
             if not any(d in page_text for d in [today_md_slash, today_day_half, today_day_full]):
                 print(f"🟢 MUFG市況：本日（{dt_jst.day}日）の市況データはまだ更新されていません。")
                 return None
 
-            # HTML要素から <p class="text"> を特定して抽出
             target_p = soup.find("p", class_="text")
-            if target_p:
-                raw_text = target_p.get_text("\n", strip=True)
-                lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
-                # 先頭の2つの段落を抽出してまとめる
-                summary_text = "\n".join(lines[:4])
-
-            if not summary_text:
+            if not target_p:
                 return None
+
+            raw_text = target_p.get_text("\n", strip=True)
+            paragraphs = [p.strip().replace("\n", "") for p in raw_text.split("\n\n") if p.strip()]
+
+            # 本文から日経平均・TOPIX・売買代金の各要素を抽出・整理
+            n225_info, topix_info, market_info = "", "", ""
+
+            for p in paragraphs:
+                if "日経平均株価" in p and not n225_info:
+                    n225_info = p
+                elif "東証株価指数" in p or "ＴＯＰＩＸ" in p and not topix_info:
+                    topix_info = p
+                elif "売買代金" in p and not market_info:
+                    market_info = p
+
+            desc_parts = []
+            if n225_info:
+                desc_parts.append(f"【日経平均の動き】\n{n225_info[:120]}...")
+            if topix_info:
+                desc_parts.append(f"【TOPIXの動き】\n{topix_info[:100]}")
+            if market_info:
+                desc_parts.append(f"【市場統計】\n{market_info}")
+
+            desc = "\n\n".join(desc_parts) if desc_parts else raw_text[:300] + "..."
 
         except Exception as e:
             print(f"❌ MUFG市況スクレイピングエラー: {e}")
             return None
 
     title = f"📈 本日の日本株式市況要約\n({today_md_slash} 夕方更新)"
-    desc = summary_text
-
     return create_flex_bubble("🇯🇵 本日の株式市況", "#16A085", title, desc, "ソース: 三菱UFJモルガン・スタンレー証券")
 
 def get_fgi_bubble(force_test=False):
@@ -433,7 +450,7 @@ def main():
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
-    if today_wd == 5: return
+    if today_wd == 5: return # 土曜スキップ
 
     if today_wd == 6:
         b_margin = get_margin_bubble()
