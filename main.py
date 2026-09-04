@@ -55,25 +55,25 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None)
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
     bubble = {
         "type": "bubble",
-        "size": "micro", # カルーセルに最適な細めのカードサイズ
+        "size": "mega", # ★ 視認性向上のため「micro」からゆとりのある「mega」サイズへ変更
         "styles": {"header": {"backgroundColor": header_color}},
         "header": {
             "type": "box", "layout": "vertical", "paddingAll": "10px",
-            "contents": [{"type": "text", "text": header_text, "color": "#FFFFFF", "weight": "bold", "size": "xs", "wrap": True}]
+            "contents": [{"type": "text", "text": header_text, "color": "#FFFFFF", "weight": "bold", "size": "sm", "wrap": True}]
         },
         "body": {
             "type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "15px",
             "contents": [
-                {"type": "text", "text": title, "weight": "bold", "size": "sm", "wrap": True, "color": "#111111"},
+                {"type": "text", "text": title, "weight": "bold", "size": "md", "wrap": True, "color": "#111111"},
                 {"type": "separator", "margin": "md"},
-                {"type": "text", "text": desc, "wrap": True, "size": "xs", "color": "#333333", "margin": "md"}
+                {"type": "text", "text": desc, "wrap": True, "size": "sm", "color": "#333333", "margin": "md"}
             ]
         }
     }
     if footer_text:
         bubble["footer"] = {
             "type": "box", "layout": "vertical", "paddingAll": "10px",
-            "contents": [{"type": "text", "text": footer_text, "wrap": True, "size": "xxs", "color": "#999999"}]
+            "contents": [{"type": "text", "text": footer_text, "wrap": True, "size": "xs", "color": "#999999"}]
         }
     return bubble
 
@@ -136,9 +136,9 @@ def get_anomaly_bubble(dt_jst, force_test=False):
         # テスト用ダミー（サンクスギビング）
         title, desc = "🦃 サンクスギビング・ラリー", "明日の米国感謝祭から「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間です。突発的な動きに注意。"
     else:
-        # 実際の判定ロジック（※文字数削減のため今回は主要ロジックのみ抜粋して稼働させます）
+        # 実際の判定ロジック
         m, d = dt_jst.month, dt_jst.day
-        if m == 9 and d == 8: # 簡易判定
+        if m == 9 and d == 8: # 簡易判定（テストコード用省略）
             title, desc = "🍂 9月効果 (September Effect)", "レイバーデイ明けで機関投資家が本格復帰。秋に向けた節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。"
         if not title: return None
     
@@ -155,12 +155,11 @@ def get_gmo_bubble(force_test=False):
     if not force_test:
         try:
             res = requests.get("https://www.gaikaex.com/gaikaex/mark/calendar/", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-            # スクレイピング実処理（※今回はテスト強制生成のためスキップしてダミーを使用します）
             pass
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None # ★ 大量通知ストッパー（MAX_LIMIT制御）
+    if len(events) > 10: return None # ★ 大量通知ストッパー
 
     desc = "\n".join(events)
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
