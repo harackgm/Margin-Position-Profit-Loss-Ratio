@@ -51,8 +51,18 @@ def is_us_holiday(dt_jst):
 # ==========================================
 # 3. Flex Message バブル生成用共通関数
 # ==========================================
-def create_flex_bubble(header_text, header_color, title, desc, footer_text=None):
+def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
+    body_contents = [
+        {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"},
+        {"type": "separator", "margin": "md"},
+        {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
+    ]
+    
+    # ★ Fear & Greed Indexの「目安リスト」など、追加の要素を本文の下に挿入できる仕組みを追加
+    if extra_contents:
+        body_contents.extend(extra_contents)
+
     bubble = {
         "type": "bubble",
         "size": "mega", 
@@ -63,13 +73,7 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None)
         },
         "body": {
             "type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "15px",
-            "contents": [
-                # ★ タイトルの改行を防ぐため、サイズを xl から lg へ1段階縮小
-                {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
-                {"type": "separator", "margin": "md"},
-                # ★ 本文は読みやすい lg サイズを維持
-                {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
-            ]
+            "contents": body_contents
         }
     }
     if footer_text:
@@ -167,7 +171,7 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 22, "Extreme Fear" # テスト用ダミー
+    score, rating = 45, "Neutral" # テスト用ダミーデータ（目安リストがわかりやすいようスコアを変更）
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -180,10 +184,34 @@ def get_fgi_bubble(force_test=False):
     color = "#E74C3C" if score <= 24 else ("#27AE60" if score >= 56 else "#34495E")
     
     if score <= 24: desc = "市場は極限のパニック状態です！みんなが恐怖で逃げ出しています。大バーゲンか底なし沼か…！？"
-    elif score <= 55: desc = "市場はきわめて冷静です。方向感を探る展開が続いています。"
+    elif score <= 55: desc = "市場はきわめて冷静です。嵐の前の静けさか、方向感を探る展開が続いています。"
     else: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
 
-    return create_flex_bubble("🧭 Fear & Greed Index", color, f"スコア: 【 {score} / 100 】\n判定: {rating}", desc)
+    # ★ スコア目安リストの生成ロジックを追加
+    m0 = "[★]" if score <= 10 else "[  ]"
+    m1 = "[★]" if 11 <= score <= 24 else "[  ]"
+    m2 = "[★]" if 25 <= 44 else "[  ]"
+    m3 = "[★]" if 45 <= score <= 55 else "[  ]"
+    m4 = "[★]" if 56 <= score <= 75 else "[  ]"
+    m5 = "[★]" if score >= 76 else "[  ]"
+
+    guide_text = (
+        f"💡 【スコアの目安】\n"
+        f"{m0} 0〜10：超絶買い場\n"
+        f"{m1} 11〜24：極度の恐怖\n"
+        f"{m2} 25〜44：恐怖\n"
+        f"{m3} 45〜55：中立・平穏\n"
+        f"{m4} 56〜75：強気モード\n"
+        f"{m5} 76〜100：超イケイケ"
+    )
+
+    # ★ 本文の下に目安リストを別のテキストブロックとして追加
+    extra_contents = [
+        {"type": "separator", "margin": "md"},
+        {"type": "text", "text": guide_text, "wrap": True, "size": "md", "color": "#555555", "margin": "md"}
+    ]
+
+    return create_flex_bubble("🧭 Fear & Greed Index", color, f"スコア: 【 {score} / 100 】\n判定: {rating}", desc, "ソース: CNN Markets", extra_contents)
 
 # ==========================================
 # 5. カルーセル一括送信処理
