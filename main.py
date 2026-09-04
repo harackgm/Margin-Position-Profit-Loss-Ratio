@@ -9,8 +9,9 @@ from bs4 import BeautifulSoup
 # 1. 設定情報
 # ==========================================
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
+LINE_USER_ID = os.environ.get("LINE_USER_ID")  # ★ NEW: 開発者の個別テスト用ID
 
-# ★ テスト実行用安全スイッチ（Trueの時はLINEに通知せずログ出力のみ行う）
+# ★ テスト実行用安全スイッチ（Trueの時は開発者のみにPush通知する）
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -229,7 +230,7 @@ def check_and_send_anomaly_notice(dt_jst):
 
     msg_body = None
 
-    # 月の「第1営業日」かどうかの判定（土日・祝日をスキップして確実に拾う）
+    # 月の「第1営業日」かどうかの判定
     is_first_business_day = True
     if dt_jst.weekday() >= 5 or is_japanese_holiday(dt_jst):
         is_first_business_day = False
@@ -252,10 +253,10 @@ def check_and_send_anomaly_notice(dt_jst):
             msg_body = "🏄 【アノマリー：サマーラリー】\n7月はボーナス資金の流入などで一時的に相場が上昇しやすく、強含みしやすい傾向があります。"
         elif month == 8:
             msg_body = "🌻 【アノマリー警戒：夏枯れ相場】\n8月はお盆や海外勢の夏休みで市場参加者が減り、商いが薄くなります。突発的な急落（ボラティリティ増大）に十分注意してください。"
-        elif month == 9: # ★NEW: 9月効果
+        elif month == 9:
             msg_body = "🍂 【アノマリー警戒：9月効果 (September Effect)】\nレイバーデイ明けで機関投資家が市場に本格復帰します。秋に向けたポジション調整や決算前の節税売りが出やすく、年間で最も相場が軟調になりやすい警戒月です。"
 
-    # 【日付固定の中旬・月末アノマリー】 (平日稼働時に該当日であれば通知)
+    # 【日付固定の中旬・月末アノマリー】
     if month == 3 and day == 15:
         msg_body = "🌸 【アノマリー：期末の需給・お化粧買い】\n3月末に向けて、配当権利取りや機関投資家による決算対策の買いが入りやすく、底堅い展開になりやすい時期です。"
     elif month == 10 and day == 28:
@@ -278,31 +279,39 @@ def check_and_send_anomaly_notice(dt_jst):
         print("🟢 本日はアノマリー通知日ではありません。")
 
 # ==========================================
-# 5. LINE 送信関数
+# 5. LINE 送信関数 (★ テスト用にPush通知機能を追加)
 # ==========================================
 def send_line_message(text):
-    """登録者全員へブロードキャスト一括送信"""
-    
-    # ★ テスト・デバッグモードの場合は送信スキップ
-    if DEBUG_MODE:
-        print("\n🛠️ 【DEBUG_MODE: ON】 LINEへの実際の送信をスキップしました。")
-        print("▼▼ 送信予定メッセージ ▼▼\n")
-        print(text)
-        print("\n▲▲▲▲▲▲▲▲▲▲▲▲▲▲\n")
-        return
-
+    """通知送信モジュール"""
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
-
-    url = "https://api.line.me/v2/bot/message/broadcast"
-    payload = {"messages": [{"type": "text", "text": text}]}
-    target_name = "全員一括（ブロードキャスト送信）"
 
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}",
     }
+
+    if DEBUG_MODE:
+        # デバッグモード時は開発者のみへ個別送信（Push API）
+        if not LINE_USER_ID:
+            print("\n⚠️ 【DEBUG_MODE: ON】 しかし LINE_USER_ID が未設定のため送信できません。ログに出力します。")
+            print("▼▼ 送信予定メッセージ ▼▼\n")
+            print(text)
+            print("\n▲▲▲▲▲▲▲▲▲▲▲▲▲▲\n")
+            return
+        
+        url = "https://api.line.me/v2/bot/message/push"
+        payload = {
+            "to": LINE_USER_ID,
+            "messages": [{"type": "text", "text": f"🛠️【テスト送信】\n\n{text}"}]
+        }
+        target_name = "開発者のみ（Push一斉送信回避）"
+    else:
+        # 本番モード（Broadcast API）
+        url = "https://api.line.me/v2/bot/message/broadcast"
+        payload = {"messages": [{"type": "text", "text": text}]}
+        target_name = "全員一括（ブロードキャスト送信）"
 
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=10)
@@ -538,7 +547,6 @@ def check_gaikaex_economy_index():
 
         print("-" * 30)
         if target_events:
-            # ★大量通知ストッパー（MAX_LIMIT）
             if len(target_events) > 10:
                 print(f"⚠️ 検知異常: 本日の★★★指標が {len(target_events)} 件と異常値です。誤配信を防ぐため通知をスキップします。")
                 return
@@ -561,14 +569,16 @@ def main():
     jst = timezone(timedelta(hours=9))
     now_jst = datetime.now(jst)
     
-    today_wd = now_jst.weekday()
-    now_hour = now_jst.hour
+    # ★ 動作テスト用（朝5時でも強制的に「平日の朝8時」と認識させてアノマリー等を実行させる）
+    # テストが終わったら、以下の2行をコメントアウトするか削除してください。
+    today_wd = 1  # 1は火曜日のため平日扱いになる
+    now_hour = 8  # 強制的に朝8時のルートを通す
+    
+    # 本番用（テスト完了後にこちらを生かします）
+    # today_wd = now_jst.weekday()
+    # now_hour = now_jst.hour
 
-    # ★ 強制的に朝8時のルート、または夜21時のルートをテストしたい場合は以下のコメントを外して数値を固定します。
-    # today_wd = 1  # 1:火曜日 (平日扱い)
-    # now_hour = 8  # 8:朝の部, 21:夜の部
-
-    print(f"🤖 チェック開始... (曜日: {today_wd}, 時刻: {now_hour}時)")
+    print(f"🤖 チェック開始... (テスト実行: 曜日{today_wd}, 時刻{now_hour}時扱いで実行)")
 
     if today_wd == 5:
         print("☕ 土曜日のためスキップ")
