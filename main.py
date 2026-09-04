@@ -59,21 +59,21 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None)
         "styles": {"header": {"backgroundColor": header_color}},
         "header": {
             "type": "box", "layout": "vertical", "paddingAll": "10px",
-            "contents": [{"type": "text", "text": header_text, "color": "#FFFFFF", "weight": "bold", "size": "md", "wrap": True}] # sm -> mdに変更
+            "contents": [{"type": "text", "text": header_text, "color": "#FFFFFF", "weight": "bold", "size": "md", "wrap": True}]
         },
         "body": {
             "type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "15px",
             "contents": [
-                {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"}, # md -> lgに変更
+                {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"}, # ★ lg -> xl に拡大
                 {"type": "separator", "margin": "md"},
-                {"type": "text", "text": desc, "wrap": True, "size": "md", "color": "#333333", "margin": "md"} # sm -> mdに変更
+                {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"} # ★ md -> lg に拡大
             ]
         }
     }
     if footer_text:
         bubble["footer"] = {
             "type": "box", "layout": "vertical", "paddingAll": "10px",
-            "contents": [{"type": "text", "text": footer_text, "wrap": True, "size": "sm", "color": "#999999"}] # xs -> smに変更
+            "contents": [{"type": "text", "text": footer_text, "wrap": True, "size": "sm", "color": "#999999"}]
         }
     return bubble
 
