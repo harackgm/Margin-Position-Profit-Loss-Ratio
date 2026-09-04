@@ -2,11 +2,10 @@ name: Market Anomaly Alert Bot
 
 on:
   schedule:
-    # JST(日本時間)を基準にcronを設定 (UTCで指定するため、日本時間からマイナス9時間)
-    # 例: 朝8時(JST) = 前日23時(UTC) / 夜21時(JST) = 12時(UTC)
-    - cron: '0 23 * * *' # JST 朝8:00
-    - cron: '0 12 * * *' # JST 夜21:00
-  workflow_dispatch: # 手動でテスト実行するためのボタンを有効化
+    # JST 朝8:00 (UTC 23:00前日) / JST 夜21:00 (UTC 12:00)
+    - cron: '0 23 * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 手動実行ボタンの有効化
 
 jobs:
   run-bot:
@@ -28,11 +27,8 @@ jobs:
 
       - name: Run Python Script
         env:
-          # サーバー環境を強制的に日本時間に固定
-          TZ: 'Asia/Tokyo'
-          # GitHub SecretsからPythonコードへ変数を渡す
+          TZ: 'Asia/Tokyo' # サーバータイムゾーンを日本時間に固定
           LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
-          # 実行するPythonファイル名を指定（実際のファイル名に合わせて変更してください）
-          python main.py
+          python main.py # ※ファイル名が異なる場合は変更してください
