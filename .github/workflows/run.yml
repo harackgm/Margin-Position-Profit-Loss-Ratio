@@ -1,11 +1,24 @@
 name: Market Anomaly Alert Bot
 
 on:
+  # 1. Cronjobs(外部サービス)やGitHub画面からの呼び出しを許可
+  workflow_dispatch:
+
+  # 2. 予備設定：Cronjobs側に遅延や停止が発生した際のGitHub自動バックアップ
   schedule:
-    # JST 朝8:00 (UTC 23:00前日) / JST 夜21:00 (UTC 12:00)
+    # JST 朝 08:00 (UTC 23:00前日)
     - cron: '0 23 * * *'
+    
+    # JST 夕方市況巡回 (15:30, 16:00, 16:30, 17:00, 17:30, 18:00) -> 平日UTC 06:30〜09:00
+    - cron: '30 6 * * 1-5'
+    - cron: '0 7 * * 1-5'
+    - cron: '30 7 * * 1-5'
+    - cron: '0 8 * * 1-5'
+    - cron: '30 8 * * 1-5'
+    - cron: '0 9 * * 1-5'
+    
+    # JST 夜 21:00 (UTC 12:00)
     - cron: '0 12 * * *'
-  workflow_dispatch: # 手動実行ボタンの有効化
 
 jobs:
   run-bot:
@@ -27,8 +40,9 @@ jobs:
 
       - name: Run Python Script
         env:
-          TZ: 'Asia/Tokyo' # サーバータイムゾーンを日本時間に固定
+          # ★ サーバー環境を厳密に日本時間(JST)へ固定
+          TZ: 'Asia/Tokyo'
           LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
-          python main.py # ※ファイル名が異なる場合は変更してください
+          python main.py
