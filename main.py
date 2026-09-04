@@ -54,7 +54,7 @@ def is_us_holiday(dt_jst):
 def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
     body_contents = [
-        {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"},
+        {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
         {"type": "separator", "margin": "md"},
         {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
     ]
@@ -137,7 +137,8 @@ def get_margin_bubble(force_test=False):
 def get_anomaly_bubble(dt_jst, force_test=False):
     title, desc = "", ""
     if force_test:
-        title, desc = "🦃 サンクスギビング・ラリー", "明日の米国感謝祭から「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間です。突発的な動きに注意。"
+        # ★改行防止のため「サンクスギビング・ラリー」の「・」を削除して文字数を調整
+        title, desc = "🦃 サンクスギビングラリー", "明日の米国感謝祭から「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間です。突発的な動きに注意。"
     else:
         m, d = dt_jst.month, dt_jst.day
         if m == 9 and d == 8:
@@ -161,13 +162,13 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None # ★ 大量通知ストッパー（MAX_LIMIT）
+    if len(events) > 10: return None # 大量通知ストッパー（MAX_LIMIT制御）
 
     desc = "\n".join(events)
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 45, "Neutral" # テスト用ダミーデータ（45は中立）
+    score, rating = 45, "Neutral" # テスト用ダミーデータ
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -179,7 +180,6 @@ def get_fgi_bubble(force_test=False):
     if score is None: return None
     color = "#E74C3C" if score <= 24 else ("#27AE60" if score >= 56 else "#34495E")
     
-    # ★ 新しい7段階のスコア区分に応じたメッセージ
     if score <= 10: desc = "歴史的な大パニック！ここは絶対に買え！！身の毛もよだつ恐怖に打ち勝ち大金を手に入れろ！"
     elif score <= 24: desc = "市場は極度の恐怖！買い場で間違いなし！みんなが逃げ出している超バーゲンセールです。"
     elif score <= 44: desc = "市場は恐怖モードに突入中。弱気なムードが漂っています。"
@@ -188,47 +188,41 @@ def get_fgi_bubble(force_test=False):
     elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
     else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
-    # ★ 7段階のインデックス判定 (中立=45〜55がちょうど真ん中の3)
     idx = 0
     if score <= 10: idx = 0
     elif score <= 24: idx = 1
     elif score <= 44: idx = 2
-    elif score <= 55: idx = 3 # 中立（真ん中）
+    elif score <= 55: idx = 3
     elif score <= 75: idx = 4
     elif score <= 90: idx = 5
     else: idx = 6
 
-    # 7段階のカラーパレット
     colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
     
-    # 凡例用の設定（[色の表示名, スコアと説明]）
     legend_info = [
         ("濃赤:", " 0〜10 (ここは絶対に買え！！)"),
-        ("赤:", " 11〜24 (極度の恐怖)"),
-        ("濃橙:", " 25〜44 (恐怖)"),
-        ("橙:", " 45〜55 (中立・平穏)"),
-        ("灰:", " 56〜75 (強気モード)"),
-        ("緑:", " 76〜90 (超イケイケ！)"),
-        ("濃緑:", " 91〜100 (暴落間近)")
+        ("赤:", " 11〜24 (買い場で間違いなし！)"),
+        ("濃橙:", " 25〜44 (極度の恐怖入り)"),
+        ("橙:", " 45〜55 (恐怖)"),
+        ("灰:", " 56〜75 (中立・平穏)"),
+        ("緑:", " 76〜90 (強気モード)"),
+        ("濃緑:", " 91〜100 (超イケイケ)")
     ]
 
     marker_boxes = []
     bar_boxes = []
 
     for i in range(7):
-        # ▼ マーカー
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({
             "type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1
         })
-        # ★ カラーバー（現在地をさらに強調するため 16px に太く変更）
         height = "16px" if i == idx else "6px"
         bar_boxes.append({
             "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
             "contents": []
         })
 
-    # ★ 凡例のテキスト生成（色名のみカラー、数値と文章は黒色、現在地は太字）
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
     for i in range(7):
         color_label, text_body = legend_info[i]
@@ -242,24 +236,23 @@ def get_fgi_bubble(force_test=False):
                 {
                     "type": "text",
                     "text": color_label,
-                    "color": colors[i], # 色名のみ各々の色を適用
+                    "color": colors[i],
                     "size": "xs",
-                    "weight": "bold" if is_current else "bold",
+                    "weight": "bold",
                     "flex": 0
                 },
                 {
                     "type": "text",
                     "text": text_body,
-                    "color": "#111111", # 数値とテキストは黒色
+                    "color": "#111111",
                     "size": "xs",
-                    "weight": "bold" if is_current else "regular", # ★ 現在地の行全体を太字で強調
+                    "weight": "bold" if is_current else "regular",
                     "flex": 1,
                     "wrap": True
                 }
             ]
         })
 
-    # ★ ウォーレン・ヴァフェットの名言
     buffett_box = {
         "type": "text",
         "text": "※ウォーレン・ヴァフェットの名言\n「他人が貪欲なときに恐れ、他人が恐れているときに貪欲であれ」",
