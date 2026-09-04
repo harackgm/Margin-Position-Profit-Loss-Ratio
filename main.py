@@ -54,7 +54,7 @@ def is_us_holiday(dt_jst):
 def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
     body_contents = [
-        {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
+        {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"},
         {"type": "separator", "margin": "md"},
         {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
     ]
@@ -167,7 +167,7 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 45, "Neutral" # テスト用ダミーデータ
+    score, rating = 45, "Neutral" # テスト用ダミーデータ（45は中立）
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -179,48 +179,82 @@ def get_fgi_bubble(force_test=False):
     if score is None: return None
     color = "#E74C3C" if score <= 24 else ("#27AE60" if score >= 56 else "#34495E")
     
-    if score <= 24: desc = "市場は極限のパニック状態です！みんなが恐怖で逃げ出しています。大バーゲンか底なし沼か…！？"
+    # 7段階に応じた解説文の変更
+    if score <= 5: desc = "歴史的な大パニック！千載一遇の超絶買い場到来か！？目をつむって買いまくれ！"
+    elif score <= 10: desc = "市場は極限のパニック状態です！恐怖に打ち勝つ者が将来の利益を手にします。"
+    elif score <= 24: desc = "市場は極度の恐怖に包まれています。みんなが逃げ出しているバーゲンセール状態です。"
+    elif score <= 44: desc = "市場には弱気なムードが漂い、警戒と恐怖が広がっています。"
     elif score <= 55: desc = "市場はきわめて冷静です。嵐の前の静けさか、方向感を探る展開が続いています。"
-    else: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
+    elif score <= 75: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
+    else: desc = "市場は熱狂の渦！絶好調ですが、過熱感バツグンなので高値掴みには注意！"
 
+    # ★ 7段階メーターの生成ロジック
     idx = 0
-    if score <= 10: idx = 0
-    elif score <= 24: idx = 1
-    elif score <= 44: idx = 2
-    elif score <= 55: idx = 3
-    elif score <= 75: idx = 4
-    else: idx = 5
+    if score <= 5: idx = 0
+    elif score <= 10: idx = 1
+    elif score <= 24: idx = 2
+    elif score <= 44: idx = 3
+    elif score <= 55: idx = 4
+    elif score <= 75: idx = 5
+    else: idx = 6
 
-    colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
+    # メーターの7段階の色
+    colors = ["#8B0000", "#E74C3C", "#D35400", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
+    labels = [
+        "濃赤: 0〜5 (ここは絶対に買え！！)",
+        "赤: 6〜10 (買い場で間違いなし！)",
+        "濃橙: 11〜24 (極度の恐怖入り)",
+        "橙: 25〜44 (恐怖)",
+        "灰: 45〜55 (中立・平穏)",
+        "緑: 56〜75 (強気モード)",
+        "濃緑: 76〜100 (超イケイケ)"
+    ]
+
     marker_boxes = []
     bar_boxes = []
 
-    for i in range(6):
+    for i in range(7):
+        # マーカー
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({
             "type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1
         })
+        # カラーバー
         height = "12px" if i == idx else "6px"
         bar_boxes.append({
             "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
-            "contents": [] # ★ APIエラー対策として空のcontentsを必ず指定
+            "contents": []
         })
 
-    legend_text = (
-        "💡 【メーターの凡例】\n"
-        "濃赤: 0〜10 (超絶買い場)\n"
-        "赤: 11〜24 (極度の恐怖)\n"
-        "橙: 25〜44 (恐怖)\n"
-        "灰: 45〜55 (中立・平穏)\n"
-        "緑: 56〜75 (強気モード)\n"
-        "濃緑: 76〜100 (超イケイケ)"
-    )
+    # ★ 凡例リストを色付きで生成
+    legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
+    for i in range(7):
+        legend_boxes.append({
+            "type": "text",
+            "text": labels[i],
+            "size": "xs",
+            "color": colors[i], # 各行にバーと同じ色を適用
+            "wrap": True,
+            "weight": "bold" if i == idx else "regular" # 現在地だけ太字にする
+        })
 
+    # ★ ウォーレン・ヴァフェットの名言
+    buffett_box = {
+        "type": "text",
+        "text": "※ウォーレン・ヴァフェットの名言\n「他人が貪欲なときに恐れ、他人が恐れているときに貪欲であれ」",
+        "size": "xxs",
+        "color": "#AAAAAA",
+        "wrap": True,
+        "margin": "lg"
+    }
+
+    # ★ カードの組み立て
     extra_contents = [
         {"type": "separator", "margin": "md"},
-        {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "sm", "margin": "md"},
-        {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "sm", "alignItems": "center"},
-        {"type": "text", "text": legend_text, "wrap": True, "size": "sm", "color": "#555555", "margin": "lg"}
+        {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "xs", "margin": "md"},
+        {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "xs", "alignItems": "center"},
+        {"type": "box", "layout": "vertical", "contents": legend_boxes, "margin": "lg", "spacing": "xs"},
+        buffett_box
     ]
 
     return create_flex_bubble("🧭 Fear & Greed Index", color, f"スコア: 【 {score} / 100 】\n判定: {rating}", desc, "ソース: CNN Markets", extra_contents)
