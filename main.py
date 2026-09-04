@@ -59,7 +59,6 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
         {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
     ]
     
-    # ★ Fear & Greed Indexの「カラーメーター」など、追加の要素を挿入
     if extra_contents:
         body_contents.extend(extra_contents)
 
@@ -101,7 +100,6 @@ def get_sq_bubble(dt_jst, force_test=False):
         
         if not is_sq: return None
 
-    # テスト時は強制的にメジャーSQとして生成
     is_major = True if force_test else is_major
     header = "🚨 メジャーSQ日！" if is_major else "⚠️ 本日SQ算出日"
     color = "#C0392B" # 濃い赤
@@ -139,19 +137,17 @@ def get_margin_bubble(force_test=False):
 def get_anomaly_bubble(dt_jst, force_test=False):
     title, desc = "", ""
     if force_test:
-        # テスト用ダミー（サンクスギビング）
         title, desc = "🦃 サンクスギビング・ラリー", "明日の米国感謝祭から「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上がりやすい期間です。突発的な動きに注意。"
     else:
-        # 実際の判定ロジック
         m, d = dt_jst.month, dt_jst.day
-        if m == 9 and d == 8: # 簡易判定（テストコード用省略）
+        if m == 9 and d == 8:
             title, desc = "🍂 9月効果 (September Effect)", "レイバーデイ明けで機関投資家が本格復帰。秋に向けた節税売りが出やすく、年間で最も株価が下落しやすい警戒時期のスタートです。"
         if not title: return None
     
     return create_flex_bubble("🗓️ 相場カレンダー", "#2C3E50", title, desc, "※アノマリーは経験則です。一つの目安として活用ください。")
 
 def get_fomc_bubble(dt_jst, force_test=False):
-    if not force_test: return None # 本来は日付判定が入るが、テスト用に短縮
+    if not force_test: return None
     title = "🏛️🇺🇸 FOMC政策金利発表"
     desc = "日本時間の今夜深夜(3:00〜4:00頃)に政策金利が発表されます。\n発表前後でドル円や米国株が激しく乱高下する警戒夜です。ポジションの持ち越しに注意！"
     return create_flex_bubble("🚨 最重要イベント", "#8E44AD", title, desc)
@@ -165,7 +161,7 @@ def get_gmo_bubble(force_test=False):
         except: return None
     
     if not events: return None
-    if len(events) > 10: return None # ★ 大量通知ストッパー
+    if len(events) > 10: return None
 
     desc = "\n".join(events)
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
@@ -187,7 +183,6 @@ def get_fgi_bubble(force_test=False):
     elif score <= 55: desc = "市場はきわめて冷静です。嵐の前の静けさか、方向感を探る展開が続いています。"
     else: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
 
-    # ★ カラーメーターの生成ロジック
     idx = 0
     if score <= 10: idx = 0
     elif score <= 24: idx = 1
@@ -196,22 +191,19 @@ def get_fgi_bubble(force_test=False):
     elif score <= 75: idx = 4
     else: idx = 5
 
-    # メーターの6段階の色（濃赤、赤、橙、灰、緑、濃緑）
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
-
     marker_boxes = []
     bar_boxes = []
 
     for i in range(6):
-        # 現在地のマーカー（▼）
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({
             "type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1
         })
-        # カラーバー（現在地のみ高さを12pxにして少し太く見せる）
         height = "12px" if i == idx else "6px"
         bar_boxes.append({
-            "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px"
+            "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px",
+            "contents": [] # ★ APIエラー対策として空のcontentsを必ず指定
         })
 
     legend_text = (
@@ -224,7 +216,6 @@ def get_fgi_bubble(force_test=False):
         "濃緑: 76〜100 (超イケイケ)"
     )
 
-    # ★ 本文の下にメーターを追加
     extra_contents = [
         {"type": "separator", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "sm", "margin": "md"},
@@ -238,9 +229,7 @@ def get_fgi_bubble(force_test=False):
 # 5. カルーセル一括送信処理
 # ==========================================
 def send_carousel_message(bubbles):
-    """複数のバブル（最大12個）を横スワイプのカルーセル形式で送信する"""
-    if not bubbles:
-        return
+    if not bubbles: return
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return
@@ -250,10 +239,7 @@ def send_carousel_message(bubbles):
             {
                 "type": "flex",
                 "altText": "相場アラート（複数通知があります）",
-                "contents": {
-                    "type": "carousel",
-                    "contents": bubbles
-                }
+                "contents": {"type": "carousel", "contents": bubbles}
             }
         ]
     }
@@ -285,7 +271,6 @@ def main():
     print(f"🤖 チェック開始... (DEBUG_MODE={DEBUG_MODE})")
 
     if DEBUG_MODE:
-        # ★テストモード: 全種類のバブルを強制生成してカルーセルに詰め込む
         print("🛠️ テスト用カルーセルを強制生成します...")
         bubbles.append(get_sq_bubble(now_jst, force_test=True))
         bubbles.append(get_margin_bubble(force_test=True))
@@ -294,7 +279,6 @@ def main():
         bubbles.append(get_gmo_bubble(force_test=True))
         bubbles.append(get_fgi_bubble(force_test=True))
         
-        # Noneを除去して送信
         bubbles = [b for b in bubbles if b is not None]
         send_carousel_message(bubbles)
         print("🏁 テスト処理完了。")
@@ -307,14 +291,12 @@ def main():
     if today_wd == 5: return # 土曜スキップ
 
     if today_wd == 6:
-        # 日曜日の定期報告
         b_margin = get_margin_bubble()
         b_fgi = get_fgi_bubble()
         if b_margin: bubbles.append(b_margin)
         if b_fgi: bubbles.append(b_fgi)
 
     elif now_hour == 8:
-        # 朝の部
         if not is_japanese_holiday(now_jst):
             b_sq = get_sq_bubble(now_jst)
             b_margin = get_margin_bubble()
@@ -324,7 +306,6 @@ def main():
             if b_anomaly: bubbles.append(b_anomaly)
 
     else:
-        # 夜の部
         if not is_us_holiday(now_jst):
             b_fomc = get_fomc_bubble(now_jst)
             b_gmo = get_gmo_bubble()
@@ -333,7 +314,6 @@ def main():
             if b_gmo: bubbles.append(b_gmo)
             if b_fgi: bubbles.append(b_fgi)
 
-    # 蓄積したバブルがあればカルーセルで送信
     if bubbles:
         send_carousel_message(bubbles)
 
