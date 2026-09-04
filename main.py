@@ -64,9 +64,11 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None)
         "body": {
             "type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "15px",
             "contents": [
-                {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"}, # ★ lg -> xl に拡大
+                # ★ タイトルの改行を防ぐため、サイズを xl から lg へ1段階縮小
+                {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
                 {"type": "separator", "margin": "md"},
-                {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"} # ★ md -> lg に拡大
+                # ★ 本文は読みやすい lg サイズを維持
+                {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
             ]
         }
     }
