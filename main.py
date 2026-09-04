@@ -54,12 +54,12 @@ def is_us_holiday(dt_jst):
 def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
     """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
     body_contents = [
-        {"type": "text", "text": title, "weight": "bold", "size": "xl", "wrap": True, "color": "#111111"},
+        {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#111111"},
         {"type": "separator", "margin": "md"},
         {"type": "text", "text": desc, "wrap": True, "size": "lg", "color": "#333333", "margin": "md"}
     ]
     
-    # ★ Fear & Greed Indexの「目安リスト」など、追加の要素を本文の下に挿入できる仕組みを追加
+    # ★ Fear & Greed Indexの「カラーメーター」など、追加の要素を挿入
     if extra_contents:
         body_contents.extend(extra_contents)
 
@@ -171,7 +171,7 @@ def get_gmo_bubble(force_test=False):
     return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
 
 def get_fgi_bubble(force_test=False):
-    score, rating = 45, "Neutral" # テスト用ダミーデータ（目安リストがわかりやすいようスコアを変更）
+    score, rating = 45, "Neutral" # テスト用ダミーデータ
     if not force_test:
         try:
             res = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata", headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
@@ -187,28 +187,49 @@ def get_fgi_bubble(force_test=False):
     elif score <= 55: desc = "市場はきわめて冷静です。嵐の前の静けさか、方向感を探る展開が続いています。"
     else: desc = "市場は強気ムード上昇中！買いの勢いがついています。"
 
-    # ★ スコア目安リストの生成ロジックを追加
-    m0 = "[★]" if score <= 10 else "[  ]"
-    m1 = "[★]" if 11 <= score <= 24 else "[  ]"
-    m2 = "[★]" if 25 <= 44 else "[  ]"
-    m3 = "[★]" if 45 <= score <= 55 else "[  ]"
-    m4 = "[★]" if 56 <= score <= 75 else "[  ]"
-    m5 = "[★]" if score >= 76 else "[  ]"
+    # ★ カラーメーターの生成ロジック
+    idx = 0
+    if score <= 10: idx = 0
+    elif score <= 24: idx = 1
+    elif score <= 44: idx = 2
+    elif score <= 55: idx = 3
+    elif score <= 75: idx = 4
+    else: idx = 5
 
-    guide_text = (
-        f"💡 【スコアの目安】\n"
-        f"{m0} 0〜10：超絶買い場\n"
-        f"{m1} 11〜24：極度の恐怖\n"
-        f"{m2} 25〜44：恐怖\n"
-        f"{m3} 45〜55：中立・平穏\n"
-        f"{m4} 56〜75：強気モード\n"
-        f"{m5} 76〜100：超イケイケ"
+    # メーターの6段階の色（濃赤、赤、橙、灰、緑、濃緑）
+    colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60"]
+
+    marker_boxes = []
+    bar_boxes = []
+
+    for i in range(6):
+        # 現在地のマーカー（▼）
+        marker_text = "▼" if i == idx else " "
+        marker_boxes.append({
+            "type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1
+        })
+        # カラーバー（現在地のみ高さを12pxにして少し太く見せる）
+        height = "12px" if i == idx else "6px"
+        bar_boxes.append({
+            "type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px"
+        })
+
+    legend_text = (
+        "💡 【メーターの凡例】\n"
+        "濃赤: 0〜10 (超絶買い場)\n"
+        "赤: 11〜24 (極度の恐怖)\n"
+        "橙: 25〜44 (恐怖)\n"
+        "灰: 45〜55 (中立・平穏)\n"
+        "緑: 56〜75 (強気モード)\n"
+        "濃緑: 76〜100 (超イケイケ)"
     )
 
-    # ★ 本文の下に目安リストを別のテキストブロックとして追加
+    # ★ 本文の下にメーターを追加
     extra_contents = [
         {"type": "separator", "margin": "md"},
-        {"type": "text", "text": guide_text, "wrap": True, "size": "md", "color": "#555555", "margin": "md"}
+        {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "sm", "margin": "md"},
+        {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "sm", "alignItems": "center"},
+        {"type": "text", "text": legend_text, "wrap": True, "size": "sm", "color": "#555555", "margin": "lg"}
     ]
 
     return create_flex_bubble("🧭 Fear & Greed Index", color, f"スコア: 【 {score} / 100 】\n判定: {rating}", desc, "ソース: CNN Markets", extra_contents)
