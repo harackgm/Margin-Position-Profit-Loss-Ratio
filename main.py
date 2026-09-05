@@ -351,7 +351,7 @@ def get_mufg_market_bubble(dt_jst):
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    # サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
+    # ★ サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
     time.sleep(random.randint(5, 15))
 
     today_md_slash = dt_jst.strftime('%m/%d')
