@@ -53,8 +53,8 @@ def is_us_holiday(dt_jst):
 # ==========================================
 # 3. Flex Message バブル生成用共通関数
 # ==========================================
-def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None):
-    """個別のFlex Messageカード（Bubble）を生成する共通フォーマット"""
+def create_flex_bubble(header_text, header_color, title, desc, footer_text=None, extra_contents=None, footer_url=None):
+    """個別のFlex Messageカード（Bubble）を生成する共通フォーマット（タップ可能URL対応）"""
     body_contents = []
     
     if isinstance(title, list):
@@ -82,9 +82,26 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
         }
     }
     if footer_text:
+        footer_item = {
+            "type": "text",
+            "text": footer_text,
+            "wrap": True,
+            "size": "sm",
+            "color": "#0275D8" if footer_url else "#999999"
+        }
+        if footer_url:
+            footer_item["action"] = {
+                "type": "uri",
+                "label": "Link",
+                "uri": footer_url
+            }
+            footer_item["decoration"] = "underline"
+
         bubble["footer"] = {
-            "type": "box", "layout": "vertical", "paddingAll": "10px",
-            "contents": [{"type": "text", "text": footer_text, "wrap": True, "size": "sm", "color": "#999999"}]
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "10px",
+            "contents": [footer_item]
         }
     return bubble
 
@@ -123,7 +140,7 @@ def get_sq_bubble(dt_jst):
     return create_flex_bubble(header, color, title, desc, "※SQ算出にかかわる板の急変にご注意ください。")
 
 def get_margin_bubble():
-    """信用評価損益率の判定バブル生成"""
+    """信用評価損益率の判定バブル生成（タップ可能URL付き）"""
     try:
         url = "https://www.traders.co.jp/margin_derivatives/margin_transition"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -171,7 +188,11 @@ def get_margin_bubble():
             "一般的に-5%〜-9%程度が平時の水準です。0%（プラス圏）に近づくほど個人投資家の懐が温まり、相場全体の買い勢力が強まります。"
         )
 
-    return create_flex_bubble(header, color, title, desc, "ソース: トレーダーズ・ウェブ")
+    return create_flex_bubble(
+        header, color, title, desc,
+        footer_text="🔗 ソース: トレーダーズ・ウェブ",
+        footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
+    )
 
 def get_anomaly_bubble(dt_jst):
     """季節性アノマリーの判定バブル生成"""
@@ -275,7 +296,7 @@ def get_fomc_bubble(dt_jst):
     return create_flex_bubble("🚨 最重要イベント", "#8E44AD", title, desc)
 
 def get_gmo_bubble():
-    """GMO証券の米国★★★重要指標バブル生成"""
+    """GMO証券の米国★★★重要指標バブル生成（タップ可能URL付き）"""
     try:
         gaikaex_url = "https://www.gaikaex.com/gaikaex/mark/calendar/"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -344,10 +365,14 @@ def get_gmo_bubble():
         "\n".join(target_events) + 
         "\n\n💡 指標発表の前後数分間は、為替・先物市場でスプレッドが拡大し突発的な値動きが起きやすくなります。"
     )
-    return create_flex_bubble("🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc, "ソース: GMO証券カレンダー")
+    return create_flex_bubble(
+        "🇺🇸 米国★★★重要指標", "#F39C12", "本日発表の注目経済指標", desc,
+        footer_text="🔗 ソース: GMO外貨 カレンダー",
+        footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
+    )
 
 def get_mufg_market_bubble(dt_jst):
-    """MUFG『本日の株式市況』詳細要約バブル生成（ゆらぎ制御付き）"""
+    """MUFG『本日の株式市況』詳細要約バブル生成（タップ可能URL付き）"""
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
@@ -400,10 +425,14 @@ def get_mufg_market_bubble(dt_jst):
         return None
 
     title = f"📈 本日の日本株式市況要約\n({today_md_slash} 夕方更新)"
-    return create_flex_bubble("🇯🇵 本日の株式市況", "#16A085", title, desc, "ソース: 三菱UFJモルガン・スタンレー証券")
+    return create_flex_bubble(
+        "🇯🇵 本日の株式市況", "#16A085", title, desc,
+        footer_text="🔗 ソース: 三菱UFJモルガン・スタンレー証券",
+        footer_url="https://www.sc.mufg.jp/market/today_market/index.html"
+    )
 
 def get_fgi_bubble():
-    """CNN Fear & Greed Index 7段階メーター付きバブル生成"""
+    """CNN Fear & Greed Index 7段階メーター付きバブル生成（タップ可能URL付き）"""
     score, rating = None, ""
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -517,7 +546,12 @@ def get_fgi_bubble():
         buffett_box
     ]
 
-    return create_flex_bubble("🧭 Fear & Greed Index", current_color, title_structures, desc, "ソース: CNN Markets", extra_contents)
+    return create_flex_bubble(
+        "🧭 Fear & Greed Index", current_color, title_structures, desc,
+        footer_text="🔗 ソース: CNN Markets",
+        extra_contents=extra_contents,
+        footer_url="https://edition.cnn.com/markets/fear-and-greed"
+    )
 
 # ==========================================
 # 5. カルーセル一括送信処理
