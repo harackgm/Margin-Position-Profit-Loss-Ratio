@@ -346,7 +346,6 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
-    # 大量通知ストッパー（最大10件制御）
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため配信をスキップします。")
         return None
@@ -364,7 +363,6 @@ def get_gmo_bubble():
 
 def get_mufg_market_bubble(dt_jst):
     """MUFG『本日の株式市況』詳細要約バブル生成"""
-    # ★ 連投ストッパーの判定：本日すでに通知済みの場合はスキップ
     if is_mufg_already_notified(dt_jst):
         print("🟢 MUFG市況：本日すでに通知済みのためスキップします。")
         return None
@@ -372,7 +370,6 @@ def get_mufg_market_bubble(dt_jst):
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    # ★ サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
     time.sleep(random.randint(5, 15))
 
     today_md_slash = dt_jst.strftime('%m/%d')
@@ -390,7 +387,6 @@ def get_mufg_market_bubble(dt_jst):
 
         raw_text = target_p.get_text("\n", strip=True)
         
-        # ★ 安全装置：ページ全体ではなく「市況本文」の中に今日の日付が含まれているか判定
         if not any(d in raw_text for d in [today_day_half, today_day_full]):
             print(f"🟢 MUFG市況：市況本文に本日（{dt_jst.day}日）の記載がないため未更新と判定します。")
             return None
@@ -408,14 +404,15 @@ def get_mufg_market_bubble(dt_jst):
                 market_info = p
 
         desc_parts = []
+        # ★ ここで文字数制限を約2倍に緩和（120→250、100→200）
         if n225_info:
-            desc_parts.append(f"【日経平均の動き】\n{n225_info[:120]}...")
+            desc_parts.append(f"【日経平均の動き】\n{n225_info[:250]}{'...' if len(n225_info) > 250 else ''}")
         if topix_info:
-            desc_parts.append(f"【TOPIXの動き】\n{topix_info[:100]}")
+            desc_parts.append(f"【TOPIXの動き】\n{topix_info[:200]}{'...' if len(topix_info) > 200 else ''}")
         if market_info:
             desc_parts.append(f"【市場統計】\n{market_info}")
 
-        desc = "\n\n".join(desc_parts) if desc_parts else raw_text[:300] + "..."
+        desc = "\n\n".join(desc_parts) if desc_parts else raw_text[:600] + "..."
 
     except Exception as e:
         print(f"❌ MUFG市況スクレイピングエラー: {e}")
@@ -545,7 +542,6 @@ def send_carousel_message(bubbles):
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return False
 
-    # ★ 大量通知ストッパー（最大10件制御）
     if len(bubbles) > 10:
         print(f"⚠️ 大量通知ストッパー作動: バブル数が {len(bubbles)} 件のため送信を一時停止します。")
         return False
