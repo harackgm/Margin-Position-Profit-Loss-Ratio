@@ -172,8 +172,8 @@ def get_us_holiday_bubble(dt_jst):
     if not holiday_name:
         return None
 
-    # ★ 空白をなくした新しい画像URL
-    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/America_holiday.png"
+    # ★ ファイル名をすべて小文字・スペースなしに変更したURL
+    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/americaholiday.png"
 
     bubble = {
         "type": "bubble",
