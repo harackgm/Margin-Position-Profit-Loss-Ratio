@@ -362,7 +362,6 @@ def get_gmo_bubble():
     )
 
 def get_mufg_market_bubble(dt_jst):
-    """MUFG『本日の株式市況』詳細要約バブル生成"""
     if is_mufg_already_notified(dt_jst):
         print("🟢 MUFG市況：本日すでに通知済みのためスキップします。")
         return None
@@ -404,7 +403,6 @@ def get_mufg_market_bubble(dt_jst):
                 market_info = p
 
         desc_parts = []
-        # ★ ここで文字数制限を約2倍に緩和（120→250、100→200）
         if n225_info:
             desc_parts.append(f"【日経平均の動き】\n{n225_info[:250]}{'...' if len(n225_info) > 250 else ''}")
         if topix_info:
@@ -492,14 +490,29 @@ def get_fgi_bubble():
         ("濃緑:", " 91〜100 (暴落間近)")
     ]
 
+    # ★ FGIメーターの組み立て（矢印、カラーバー、アイコン）
     marker_boxes = []
     bar_boxes = []
+    icon_boxes = []
 
     for i in range(7):
+        # 1. 現在地を示す矢印
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({"type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1})
+        
+        # 2. 7段階のカラーバー（該当スコアのみ太くする）
         height = "16px" if i == idx else "6px"
         bar_boxes.append({"type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px", "contents": []})
+        
+        # 3. 直感的な顔・アイコン配置
+        icon_text = " "
+        if i == 0:
+            icon_text = "👿"
+        elif i == 3:
+            icon_text = "😐"
+        elif i == 6:
+            icon_text = "👼"
+        icon_boxes.append({"type": "text", "text": icon_text, "size": "md", "align": "center", "flex": 1})
 
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
     for i in range(7):
@@ -518,10 +531,12 @@ def get_fgi_bubble():
         "size": "xxs", "color": "#AAAAAA", "wrap": True, "margin": "lg"
     }
 
+    # ★ メーター全体を結合
     extra_contents = [
         {"type": "separator", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "xs", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "xs", "alignItems": "center"},
+        {"type": "box", "layout": "horizontal", "contents": icon_boxes, "spacing": "xs", "margin": "sm"},
         {"type": "box", "layout": "vertical", "contents": legend_boxes, "margin": "lg"},
         buffett_box
     ]
@@ -628,7 +643,6 @@ def main():
 
     if bubbles:
         success = send_carousel_message(bubbles)
-        # ★ 送信成功し、かつMUFG市況が含まれていた場合、通知済みとしてファイルに記録する
         if success and any("本日の株式市況" in str(b) for b in bubbles):
             mark_mufg_as_notified(now_jst)
     else:
