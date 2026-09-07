@@ -1,10 +1,9 @@
 name: Market Anomaly Alert Bot
 
 on:
-  # Cronjobs（外部通信）およびGitHub画面からの呼び出しのみ許可
   workflow_dispatch:
 
-# ★ 変更をリポジトリに保存(Push)するための権限を追加
+# ★ 状態ファイル(state.json)の永続化に必要な書き込み権限
 permissions:
   contents: write
 
@@ -35,7 +34,6 @@ jobs:
           python main.py
 
       - name: 状態記録ファイル(state.json)の保存
-        # ★ Pythonが作成した state.json をリポジトリに自動上書き保存して記憶を維持する
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
