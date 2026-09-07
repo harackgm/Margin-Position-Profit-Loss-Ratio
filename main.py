@@ -14,7 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト・画像確認モード（True: 自分のみに送信）
-# ※確認が終わったら False に戻してください
+# ※スマホでの確認が終わったら False に戻してください
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -85,7 +85,6 @@ def is_japanese_holiday(dt_jst):
     return False
 
 def get_us_holiday_name(dt_jst):
-    """米国株式市場の休場日判定と、その祝日名を返す"""
     today_date = dt_jst.date()
     month, day, weekday = today_date.month, today_date.day, today_date.weekday()
     
@@ -162,8 +161,6 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
     return bubble
 
 def get_us_holiday_bubble(dt_jst):
-    """米国休場日をお知らせする画像付きバブルを生成"""
-    # ★ テストモード(DEBUG_MODE=True)の時は、画像確認のためにストッパーを特別に無視する
     if not DEBUG_MODE and is_us_holiday_already_notified(dt_jst):
         print("🟢 米国休場：本日すでに通知済みのためスキップします。")
         return None
@@ -172,8 +169,10 @@ def get_us_holiday_bubble(dt_jst):
     if not holiday_name:
         return None
 
-    # ★ 取得した公開画像URLを設定
-    img_url = "https://github.com/user-attachments/assets/22cebb0c-8780-4f57-930d-d6a7ed71faf4"
+    # ==========================================
+    # ★ スマホLINE対策：URLの末尾にダミー拡張子「?.png」を追加
+    # ==========================================
+    img_url = "https://github.com/user-attachments/assets/22cebb0c-8780-4f57-930d-d6a7ed71faf4?.png"
 
     bubble = {
         "type": "bubble",
