@@ -19,7 +19,7 @@ DEBUG_MODE = False
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
 
-# ★ 連投防止用の簡易データベース（状態保存ファイル）
+# ★ 連投防止用の状態保存ファイル（記憶用DB）
 STATE_FILE = "state.json"
 
 # ==========================================
@@ -372,7 +372,7 @@ def get_mufg_market_bubble(dt_jst):
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    # サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
+    # ★ サーバー負荷軽減（ゆらぎ制御）: 5秒〜15秒のランダム待機
     time.sleep(random.randint(5, 15))
 
     today_md_slash = dt_jst.strftime('%m/%d')
@@ -390,7 +390,7 @@ def get_mufg_market_bubble(dt_jst):
 
         raw_text = target_p.get_text("\n", strip=True)
         
-        # ★ 安全装置強化：ページ全体ではなく、「市況本文」の中に今日の日付が含まれているか厳密にチェック
+        # ★ 安全装置：ページ全体ではなく「市況本文」の中に今日の日付が含まれているか判定
         if not any(d in raw_text for d in [today_day_half, today_day_full]):
             print(f"🟢 MUFG市況：市況本文に本日（{dt_jst.day}日）の記載がないため未更新と判定します。")
             return None
@@ -540,12 +540,12 @@ def get_fgi_bubble():
 # 5. カルーセル一括送信処理
 # ==========================================
 def send_carousel_message(bubbles):
-    """LINEへ送信し、成功可否をブール値で返す"""
     if not bubbles: return False
     if not LINE_ACCESS_TOKEN:
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return False
 
+    # ★ 大量通知ストッパー（最大10件制御）
     if len(bubbles) > 10:
         print(f"⚠️ 大量通知ストッパー作動: バブル数が {len(bubbles)} 件のため送信を一時停止します。")
         return False
