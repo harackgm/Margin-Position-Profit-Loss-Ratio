@@ -13,8 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ 安全のため一時的にテストモード（True: 自分のみに送信）に戻しています
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -162,7 +162,8 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
 
 def get_us_holiday_bubble(dt_jst):
     """米国休場日をお知らせする画像付きバブルを生成"""
-    if is_us_holiday_already_notified(dt_jst):
+    # ★ テストモード(DEBUG_MODE=True)の時は、画像確認のためにストッパーを特別に無視する
+    if not DEBUG_MODE and is_us_holiday_already_notified(dt_jst):
         print("🟢 米国休場：本日すでに通知済みのためスキップします。")
         return None
 
@@ -170,7 +171,8 @@ def get_us_holiday_bubble(dt_jst):
     if not holiday_name:
         return None
 
-    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/America%20holiday.png"
+    # ★ ファイル名からスペースを削除し、アンダーバーに変更したURL
+    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/America_holiday.png"
 
     bubble = {
         "type": "bubble",
