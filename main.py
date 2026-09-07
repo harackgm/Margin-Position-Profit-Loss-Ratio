@@ -23,30 +23,46 @@ THRES_RECOVERY = 0.0
 STATE_FILE = "state.json"
 
 # ==========================================
-# 1.5 状態管理（連投防止ストッパー）
+# 1.5 状態管理（連投防止ストッパー・複数キー対応）
 # ==========================================
-def is_mufg_already_notified(dt_jst):
-    """本日すでにMUFG市況を通知済みか判定する"""
-    today_str = dt_jst.strftime('%Y-%m-%d')
+def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if data.get("last_mufg_date") == today_str:
-                    return True
-        except:
-            pass
-    return False
+                return json.load(f)
+        except: pass
+    return {}
 
-def mark_mufg_as_notified(dt_jst):
-    """MUFG市況の通知完了をファイルに記録する"""
-    today_str = dt_jst.strftime('%Y-%m-%d')
+def save_state(data):
     try:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"last_mufg_date": today_str}, f)
-        print(f"🔒 連投防止: 本日({today_str})の通知完了を記録しました。")
+            json.dump(data, f)
     except Exception as e:
         print(f"❌ 状態記録エラー: {e}")
+
+def is_mufg_already_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    return data.get("last_mufg_date") == today_str
+
+def mark_mufg_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_mufg_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})のMUFG市況通知を記録しました。")
+
+def is_us_holiday_already_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    return data.get("last_us_holiday_date") == today_str
+
+def mark_us_holiday_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_us_holiday_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})の米国休場通知を記録しました。")
 
 # ==========================================
 # 2. 祝日判定ロジック (日本 & アメリカ)
@@ -67,15 +83,28 @@ def is_japanese_holiday(dt_jst):
         if (yesterday.month, yesterday.day) in fixed_holidays: return True
     return False
 
-def is_us_holiday(dt_jst):
+def get_us_holiday_name(dt_jst):
+    """米国株式市場の休場日判定と、その祝日名を返す"""
     today_date = dt_jst.date()
     month, day, weekday = today_date.month, today_date.day, today_date.weekday()
-    if (month == 1 and day == 1) or (month == 6 and day == 19) or (month == 7 and day == 4) or (month == 12 and day == 25): return True
-    if weekday == 0:
-        if (month == 1 and 15 <= day <= 21) or (month == 2 and 15 <= day <= 21) or \
-           (month == 5 and 25 <= day <= 31) or (month == 9 and 1 <= day <= 7): return True
-    if weekday == 3 and month == 11 and 22 <= day <= 28: return True
-    return False
+    
+    if month == 1 and day == 1: return "元日 (New Year's Day)"
+    if month == 6 and day == 19: return "ジューンティーンス (Juneteenth Independence Day)"
+    if month == 7 and day == 4: return "独立記念日 (Independence Day)"
+    if month == 12 and day == 25: return "クリスマス (Christmas Day)"
+    
+    if weekday == 0: # 月曜日
+        if month == 1 and 15 <= day <= 21: return "キング牧師記念日 (Martin Luther King Jr. Day)"
+        if month == 2 and 15 <= day <= 21: return "プレジデント・デー (Washington's Birthday)"
+        if month == 5 and 25 <= day <= 31: return "メモリアル・デー (Memorial Day)"
+        if month == 9 and 1 <= day <= 7: return "レイバー・デー (Labor Day)"
+        
+    if weekday == 3 and month == 11 and 22 <= day <= 28: return "感謝祭 (Thanksgiving Day)"
+    
+    return None
+
+def is_us_holiday(dt_jst):
+    return get_us_holiday_name(dt_jst) is not None
 
 # ==========================================
 # 3. Flex Message バブル生成用共通関数
@@ -129,6 +158,40 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
             "paddingAll": "10px",
             "contents": [footer_item]
         }
+    return bubble
+
+def get_us_holiday_bubble(dt_jst):
+    """米国休場日をお知らせする画像付きバブルを生成"""
+    if is_us_holiday_already_notified(dt_jst):
+        print("🟢 米国休場：本日すでに通知済みのためスキップします。")
+        return None
+
+    holiday_name = get_us_holiday_name(dt_jst)
+    if not holiday_name:
+        return None
+
+    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/America%20holiday.png"
+
+    bubble = {
+        "type": "bubble",
+        "size": "mega",
+        "hero": {
+            "type": "image",
+            "url": img_url,
+            "size": "full",
+            "aspectRatio": "20:13",
+            "aspectMode": "cover"
+        },
+        "body": {
+            "type": "box", "layout": "vertical", "paddingAll": "15px",
+            "contents": [
+                {"type": "text", "text": "🇺🇸 米国市場 休場のお知らせ", "weight": "bold", "size": "lg", "color": "#111111"},
+                {"type": "separator", "margin": "md"},
+                {"type": "text", "text": f"本日は「{holiday_name}」のため、米国株式市場は休場となります。", "wrap": True, "size": "md", "color": "#333333", "margin": "md"},
+                {"type": "text", "text": "※Fear & Greed Indexや米国経済指標の更新はお休みです。", "wrap": True, "size": "sm", "color": "#888888", "margin": "md"}
+            ]
+        }
+    }
     return bubble
 
 # ==========================================
@@ -490,21 +553,16 @@ def get_fgi_bubble():
         ("濃緑:", " 91〜100 (暴落間近)")
     ]
 
-    # ★ FGIメーターの組み立て（矢印、カラーバー、アイコン）
     marker_boxes = []
     bar_boxes = []
     icon_boxes = []
 
     for i in range(7):
-        # 1. 現在地を示す矢印
         marker_text = "▼" if i == idx else " "
         marker_boxes.append({"type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1})
-        
-        # 2. 7段階のカラーバー（該当スコアのみ太くする）
         height = "16px" if i == idx else "6px"
         bar_boxes.append({"type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px", "contents": []})
         
-        # 3. 直感的な顔・アイコン配置
         icon_text = " "
         if i == 0:
             icon_text = "👿"
@@ -531,7 +589,6 @@ def get_fgi_bubble():
         "size": "xxs", "color": "#AAAAAA", "wrap": True, "margin": "lg"
     }
 
-    # ★ メーター全体を結合
     extra_contents = [
         {"type": "separator", "margin": "md"},
         {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "xs", "margin": "md"},
@@ -618,6 +675,7 @@ def main():
         if b_fgi: bubbles.append(b_fgi)
 
     elif now_hour == 8:
+        # ★ 朝の部
         if is_japanese_holiday(now_jst):
             print("🇯🇵 日本祝日のため朝の通知をスキップします。")
         else:
@@ -628,11 +686,14 @@ def main():
             if b_margin: bubbles.append(b_margin)
             if b_anomaly: bubbles.append(b_anomaly)
 
-    else:
+    elif 16 <= now_hour <= 19:
+        # ★ 夕方の部（日本市場のみ）
         if not is_japanese_holiday(now_jst):
             b_mufg = get_mufg_market_bubble(now_jst)
             if b_mufg: bubbles.append(b_mufg)
 
+    elif now_hour >= 20:
+        # ★ 夜の部（米国市場、または休場通知）
         if not is_us_holiday(now_jst):
             b_fomc = get_fomc_bubble(now_jst)
             b_gmo = get_gmo_bubble()
@@ -640,11 +701,17 @@ def main():
             if b_fomc: bubbles.append(b_fomc)
             if b_gmo: bubbles.append(b_gmo)
             if b_fgi: bubbles.append(b_fgi)
+        else:
+            b_us_holiday = get_us_holiday_bubble(now_jst)
+            if b_us_holiday: bubbles.append(b_us_holiday)
 
     if bubbles:
         success = send_carousel_message(bubbles)
-        if success and any("本日の株式市況" in str(b) for b in bubbles):
-            mark_mufg_as_notified(now_jst)
+        if success:
+            if any("本日の株式市況" in str(b) for b in bubbles):
+                mark_mufg_as_notified(now_jst)
+            if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
+                mark_us_holiday_as_notified(now_jst)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
