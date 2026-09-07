@@ -13,7 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 安全のため一時的にテストモード（True: 自分のみに送信）に戻しています
+# ★ テスト・画像確認モード（True: 自分のみに送信）
+# ※確認が終わったら False に戻してください
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -171,7 +172,7 @@ def get_us_holiday_bubble(dt_jst):
     if not holiday_name:
         return None
 
-    # ★ ファイル名からスペースを削除し、アンダーバーに変更したURL
+    # ★ 空白をなくした新しい画像URL
     img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/America_holiday.png"
 
     bubble = {
