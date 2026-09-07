@@ -1,8 +1,12 @@
 name: Market Anomaly Alert Bot
 
 on:
-  # Cronjobs（外部通信）およびGitHub画面からの呼び出しのみ許可（二重起動防止）
+  # Cronjobs（外部通信）およびGitHub画面からの呼び出しのみ許可
   workflow_dispatch:
+
+# ★ 変更をリポジトリに保存(Push)するための権限を追加
+permissions:
+  contents: write
 
 jobs:
   run-bot:
@@ -24,9 +28,16 @@ jobs:
 
       - name: Pythonスクリプトの実行
         env:
-          # ★ サーバー環境を日本時間(JST)へ厳密固定
           TZ: 'Asia/Tokyo'
           LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
           python main.py
+
+      - name: 状態記録ファイル(state.json)の保存
+        # ★ Pythonが作成した state.json をリポジトリに自動上書き保存して記憶を維持する
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add state.json || true
+          git diff --staged --quiet || git commit -m "chore: 連投防止データを更新" && git push
