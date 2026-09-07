@@ -169,10 +169,8 @@ def get_us_holiday_bubble(dt_jst):
     if not holiday_name:
         return None
 
-    # ==========================================
-    # ★ スマホLINE対策：URLの末尾にダミー拡張子「?.png」を追加
-    # ==========================================
-    img_url = "https://github.com/user-attachments/assets/22cebb0c-8780-4f57-930d-d6a7ed71faf4?.png"
+    # ★ Publicリポジトリの直接リンク（Raw URL）＋スマホ対策（?.png）
+    img_url = "https://raw.githubusercontent.com/harackgm/Margin-Position-Profit-Loss-Ratio/main/americaholiday.png?.png"
 
     bubble = {
         "type": "bubble",
