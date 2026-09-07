@@ -13,9 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト・画像確認モード（True: 自分のみに送信）
-# ※スマホでの確認が終わったら False に戻してください
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -687,13 +686,18 @@ def main():
             if b_anomaly: bubbles.append(b_anomaly)
 
     elif 16 <= now_hour <= 19:
-        # ★ 夕方の部（日本市場のみ）
+        # ★ 夕方の部（日本市場 ＋ 米国休場お知らせ）
         if not is_japanese_holiday(now_jst):
             b_mufg = get_mufg_market_bubble(now_jst)
             if b_mufg: bubbles.append(b_mufg)
+            
+        # ★ 米国休場通知をここに移動しました
+        if is_us_holiday(now_jst):
+            b_us_holiday = get_us_holiday_bubble(now_jst)
+            if b_us_holiday: bubbles.append(b_us_holiday)
 
     elif now_hour >= 20:
-        # ★ 夜の部（米国市場、または休場通知）
+        # ★ 夜の部（米国市場のみ。休場なら何もしない）
         if not is_us_holiday(now_jst):
             b_fomc = get_fomc_bubble(now_jst)
             b_gmo = get_gmo_bubble()
@@ -701,9 +705,6 @@ def main():
             if b_fomc: bubbles.append(b_fomc)
             if b_gmo: bubbles.append(b_gmo)
             if b_fgi: bubbles.append(b_fgi)
-        else:
-            b_us_holiday = get_us_holiday_bubble(now_jst)
-            if b_us_holiday: bubbles.append(b_us_holiday)
 
     if bubbles:
         success = send_carousel_message(bubbles)
