@@ -14,6 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
+# ※表示確認が完了したら False に戻してください
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -571,10 +572,10 @@ def get_fgi_bubble():
         height = "16px" if i == idx else "6px"
         bar_boxes.append({"type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px", "contents": []})
         
-        # ★ アイコン変更（👹 赤鬼 / 😇 天使）およびサイズ拡大（size: xl）
+        # ★ アイコン変更（😱 青ざめた叫び顔 / 😇 天使）およびサイズ拡大（size: xl）
         icon_text = " "
         if i == 0:
-            icon_text = "👹"
+            icon_text = "😱"
         elif i == 3:
             icon_text = "😐"
         elif i == 6:
