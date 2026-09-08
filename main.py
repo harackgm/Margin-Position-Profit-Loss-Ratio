@@ -13,8 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト送信モード（True: 自分のみに送信）
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -318,7 +318,6 @@ def get_anomaly_bubble(dt_jst):
             title = "🦃 サンクスギビングラリー"
             desc = "明日の米国感謝祭から週末の「ブラックフライデー」にかけて、年末商戦への期待感から米国株が上昇しやすいアノマリー期間に入ります！\n\n💡 【注目ポイント】\n機関投資家が休暇に入るため市場の商い（取引量）は薄くなります。少しの注文で株価が大きく動く可能性があるため注意してください。"
 
-    # ★ 節分天井・彼岸底（春・秋）の判定
     if month == 2 and day == 3:
         title = "👹 節分天井 (せつぶんてんじょう)"
         desc = "「節分天井・彼岸底」の格言通り、新春からの買い勢いが一巡し、2月上旬に相場が一時的な高値（天井）をつけやすい時期です！\n\n💡 【立ち回り】\nここから3月のお彼岸（彼岸底）に向けて調整・下落しやすくなるため、高値掴みを避け、利益確定やリスク管理を意識しましょう。"
@@ -572,14 +571,15 @@ def get_fgi_bubble():
         height = "16px" if i == idx else "6px"
         bar_boxes.append({"type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px", "contents": []})
         
+        # ★ アイコン変更（👹 赤鬼 / 😇 天使）およびサイズ拡大（size: xl）
         icon_text = " "
         if i == 0:
-            icon_text = "👿"
+            icon_text = "👹"
         elif i == 3:
             icon_text = "😐"
         elif i == 6:
-            icon_text = "👼"
-        icon_boxes.append({"type": "text", "text": icon_text, "size": "md", "align": "center", "flex": 1})
+            icon_text = "😇"
+        icon_boxes.append({"type": "text", "text": icon_text, "size": "xl", "align": "center", "flex": 1})
 
     legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
     for i in range(7):
