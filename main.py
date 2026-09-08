@@ -13,9 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト送信モード（True: 自分のみに送信）
-# ※手順1が終わったら False に書き換えてください
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
