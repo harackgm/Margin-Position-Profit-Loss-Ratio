@@ -13,8 +13,9 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト送信モード（True: 自分のみに送信）
+# ※表示確認が完了したら False に戻してください
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -532,6 +533,18 @@ def get_fgi_bubble():
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
     current_color = colors[idx]
 
+    # ★ 7段階日本語表記の定義
+    custom_ratings = [
+        "EX FEAR（超恐怖・超買い場）",
+        "FEAR（恐怖）",
+        "FEAR（ビビリ）",
+        "NEUTRAL（中立）",
+        "GREED（貪欲）",
+        "GREED（強欲）",
+        "EX GREED（超強欲）"
+    ]
+    current_rating_text = custom_ratings[idx]
+
     if score <= 10: desc = "歴史的な大パニック！ここは絶対に買え！！身の毛もよだつ恐怖に打ち勝ち大金を手に入れろ！"
     elif score <= 24: desc = "市場は極度の恐怖！買い場で間違いなし！みんなが逃げ出している超バーゲンセールです。"
     elif score <= 44: desc = "市場は恐怖モードに突入中。弱気なムードが漂っています。"
@@ -540,13 +553,14 @@ def get_fgi_bubble():
     elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
     else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
+    # ★ 判定テキストを指定表記・メーター同色で設定
     title_structures = [
         {"type": "text", "text": f"スコア: 【 {score} / 100 】", "weight": "bold", "size": "xl", "color": "#111111"},
         {
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
-                {"type": "text", "text": "判定: ", "weight": "bold", "size": "xl", "color": "#111111", "flex": 0},
-                {"type": "text", "text": f"{rating}", "weight": "bold", "size": "xl", "color": current_color, "flex": 1}
+                {"type": "text", "text": "判定: ", "weight": "bold", "size": "lg", "color": "#111111", "flex": 0},
+                {"type": "text", "text": f"{current_rating_text}", "weight": "bold", "size": "lg", "color": current_color, "flex": 1, "wrap": True}
             ]
         }
     ]
