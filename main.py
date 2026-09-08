@@ -13,9 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト送信モード（True: 自分のみに送信）
-# ※表示確認が完了したら False に戻してください
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -533,7 +532,6 @@ def get_fgi_bubble():
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
     current_color = colors[idx]
 
-    # ★ 7段階日本語表記の定義
     custom_ratings = [
         "EX FEAR（超恐怖・超買い場）",
         "FEAR（恐怖）",
@@ -553,7 +551,6 @@ def get_fgi_bubble():
     elif score <= 90: desc = "市場は超イケイケ状態！絶好調ですが高値掴みには注意！"
     else: desc = "市場はイケイケ絶頂・過熱感バツグン！暴落間近につき厳重警戒！"
 
-    # ★ 判定テキストを指定表記・メーター同色で設定
     title_structures = [
         {"type": "text", "text": f"スコア: 【 {score} / 100 】", "weight": "bold", "size": "xl", "color": "#111111"},
         {
