@@ -13,8 +13,9 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト送信モード（True: 自分のみに送信）
+# ※手順1が終わったら False に書き換えてください
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -23,7 +24,7 @@ THRES_RECOVERY = 0.0
 STATE_FILE = "state.json"
 
 # ==========================================
-# 1.5 状態管理（連投防止ストッパー・複数キー対応）
+# 1.5 状態管理（連投防止ストッパー・全時間帯対応）
 # ==========================================
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -41,9 +42,7 @@ def save_state(data):
         print(f"❌ 状態記録エラー: {e}")
 
 def is_mufg_already_notified(dt_jst):
-    today_str = dt_jst.strftime('%Y-%m-%d')
-    data = load_state()
-    return data.get("last_mufg_date") == today_str
+    return load_state().get("last_mufg_date") == dt_jst.strftime('%Y-%m-%d')
 
 def mark_mufg_as_notified(dt_jst):
     today_str = dt_jst.strftime('%Y-%m-%d')
@@ -53,9 +52,7 @@ def mark_mufg_as_notified(dt_jst):
     print(f"🔒 連投防止: 本日({today_str})のMUFG市況通知を記録しました。")
 
 def is_us_holiday_already_notified(dt_jst):
-    today_str = dt_jst.strftime('%Y-%m-%d')
-    data = load_state()
-    return data.get("last_us_holiday_date") == today_str
+    return load_state().get("last_us_holiday_date") == dt_jst.strftime('%Y-%m-%d')
 
 def mark_us_holiday_as_notified(dt_jst):
     today_str = dt_jst.strftime('%Y-%m-%d')
@@ -63,6 +60,36 @@ def mark_us_holiday_as_notified(dt_jst):
     data["last_us_holiday_date"] = today_str
     save_state(data)
     print(f"🔒 連投防止: 本日({today_str})の米国休場通知を記録しました。")
+
+def is_morning_already_notified(dt_jst):
+    return load_state().get("last_morning_date") == dt_jst.strftime('%Y-%m-%d')
+
+def mark_morning_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_morning_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})の朝の通知を記録しました。")
+
+def is_night_already_notified(dt_jst):
+    return load_state().get("last_night_date") == dt_jst.strftime('%Y-%m-%d')
+
+def mark_night_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_night_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})の夜の通知を記録しました。")
+
+def is_sunday_already_notified(dt_jst):
+    return load_state().get("last_sunday_date") == dt_jst.strftime('%Y-%m-%d')
+
+def mark_sunday_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_sunday_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})の日曜通知を記録しました。")
 
 # ==========================================
 # 2. 祝日判定ロジック (日本 & アメリカ)
@@ -161,7 +188,6 @@ def create_flex_bubble(header_text, header_color, title, desc, footer_text=None,
 
 def get_us_holiday_bubble(dt_jst):
     if not DEBUG_MODE and is_us_holiday_already_notified(dt_jst):
-        print("🟢 米国休場：本日すでに通知済みのためスキップします。")
         return None
 
     holiday_name = get_us_holiday_name(dt_jst)
@@ -434,7 +460,6 @@ def get_gmo_bubble():
 
 def get_mufg_market_bubble(dt_jst):
     if is_mufg_already_notified(dt_jst):
-        print("🟢 MUFG市況：本日すでに通知済みのためスキップします。")
         return None
 
     url = "https://www.sc.mufg.jp/market/today_market/index.html"
@@ -495,7 +520,7 @@ def get_mufg_market_bubble(dt_jst):
     )
 
 def get_fgi_bubble():
-    score, rating = None, ""
+    score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
@@ -504,7 +529,6 @@ def get_fgi_bubble():
         if res.status_code == 200:
             data = res.json()
             score = int(round(data.get("fear_and_greed", {}).get("score", 0)))
-            rating = data.get("fear_and_greed", {}).get("rating", "Neutral")
     except Exception as e:
         print(f"❌ Fear & Greed API取得エラー: {e}")
 
@@ -515,7 +539,6 @@ def get_fgi_bubble():
             match = re.search(r'"score":\s*([\d\.]+)', res.text)
             if match:
                 score = int(round(float(match.group(1))))
-                rating = "Neutral"
         except: return None
 
     if score is None: return None
@@ -687,23 +710,30 @@ def main():
         print("☕ 土曜日のためチェックをスキップします。")
         return
 
+    # 日曜の部
     if today_wd == 6:
-        b_margin = get_margin_bubble()
-        b_fgi = get_fgi_bubble()
-        if b_margin: bubbles.append(b_margin)
-        if b_fgi: bubbles.append(b_fgi)
+        if not is_sunday_already_notified(now_jst):
+            b_margin = get_margin_bubble()
+            b_fgi = get_fgi_bubble()
+            if b_margin: bubbles.append(b_margin)
+            if b_fgi: bubbles.append(b_fgi)
+        else:
+            print("🟢 日曜通知：本日すでに通知済みのためスキップします。")
 
     elif now_hour == 8:
         # ★ 朝の部
-        if is_japanese_holiday(now_jst):
-            print("🇯🇵 日本祝日のため朝の通知をスキップします。")
+        if not is_morning_already_notified(now_jst):
+            if is_japanese_holiday(now_jst):
+                print("🇯🇵 日本祝日のため朝の通知をスキップします。")
+            else:
+                b_sq = get_sq_bubble(now_jst)
+                b_margin = get_margin_bubble()
+                b_anomaly = get_anomaly_bubble(now_jst)
+                if b_sq: bubbles.append(b_sq)
+                if b_margin: bubbles.append(b_margin)
+                if b_anomaly: bubbles.append(b_anomaly)
         else:
-            b_sq = get_sq_bubble(now_jst)
-            b_margin = get_margin_bubble()
-            b_anomaly = get_anomaly_bubble(now_jst)
-            if b_sq: bubbles.append(b_sq)
-            if b_margin: bubbles.append(b_margin)
-            if b_anomaly: bubbles.append(b_anomaly)
+            print("🟢 朝の通知：本日すでに通知済みのためスキップします。")
 
     elif 16 <= now_hour <= 19:
         # ★ 夕方の部（日本市場 ＋ 米国休場お知らせ）
@@ -717,21 +747,32 @@ def main():
 
     elif now_hour >= 20:
         # ★ 夜の部（米国市場のみ。休場なら何もしない）
-        if not is_us_holiday(now_jst):
-            b_fomc = get_fomc_bubble(now_jst)
-            b_gmo = get_gmo_bubble()
-            b_fgi = get_fgi_bubble()
-            if b_fomc: bubbles.append(b_fomc)
-            if b_gmo: bubbles.append(b_gmo)
-            if b_fgi: bubbles.append(b_fgi)
+        if not is_night_already_notified(now_jst):
+            if not is_us_holiday(now_jst):
+                b_fomc = get_fomc_bubble(now_jst)
+                b_gmo = get_gmo_bubble()
+                b_fgi = get_fgi_bubble()
+                if b_fomc: bubbles.append(b_fomc)
+                if b_gmo: bubbles.append(b_gmo)
+                if b_fgi: bubbles.append(b_fgi)
+        else:
+            print("🟢 夜の通知：本日すでに通知済みのためスキップします。")
 
+    # ★ 送信と状態記録
     if bubbles:
         success = send_carousel_message(bubbles)
         if success:
-            if any("本日の株式市況" in str(b) for b in bubbles):
-                mark_mufg_as_notified(now_jst)
-            if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
-                mark_us_holiday_as_notified(now_jst)
+            if today_wd == 6:
+                mark_sunday_as_notified(now_jst)
+            elif now_hour == 8:
+                mark_morning_as_notified(now_jst)
+            elif 16 <= now_hour <= 19:
+                if any("本日の株式市況" in str(b) for b in bubbles):
+                    mark_mufg_as_notified(now_jst)
+                if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
+                    mark_us_holiday_as_notified(now_jst)
+            elif now_hour >= 20:
+                mark_night_as_notified(now_jst)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
