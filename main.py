@@ -40,16 +40,6 @@ def save_state(data):
     except Exception as e:
         print(f"❌ 状態記録エラー: {e}")
 
-def is_mufg_already_notified(dt_jst):
-    return load_state().get("last_mufg_date") == dt_jst.strftime('%Y-%m-%d')
-
-def mark_mufg_as_notified(dt_jst):
-    today_str = dt_jst.strftime('%Y-%m-%d')
-    data = load_state()
-    data["last_mufg_date"] = today_str
-    save_state(data)
-    print(f"🔒 連投防止: 本日({today_str})のMUFG市況通知を記録しました。")
-
 def is_us_holiday_already_notified(dt_jst):
     return load_state().get("last_us_holiday_date") == dt_jst.strftime('%Y-%m-%d')
 
@@ -457,67 +447,6 @@ def get_gmo_bubble():
         footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
     )
 
-def get_mufg_market_bubble(dt_jst):
-    if is_mufg_already_notified(dt_jst):
-        return None
-
-    url = "https://www.sc.mufg.jp/market/today_market/index.html"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    
-    time.sleep(random.randint(5, 15))
-
-    today_md_slash = dt_jst.strftime('%m/%d')
-    today_day_half = f"{dt_jst.day}日"
-    today_day_full = chr(ord('０') + dt_jst.day // 10) + chr(ord('０') + dt_jst.day % 10) + "日" if dt_jst.day >= 10 else chr(ord('０') + dt_jst.day) + "日"
-
-    try:
-        res = requests.get(url, headers=headers, timeout=15)
-        res.encoding = res.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        target_p = soup.find("p", class_="text")
-        if not target_p:
-            return None
-
-        raw_text = target_p.get_text("\n", strip=True)
-        
-        if not any(d in raw_text for d in [today_day_half, today_day_full]):
-            print(f"🟢 MUFG市況：市況本文に本日（{dt_jst.day}日）の記載がないため未更新と判定します。")
-            return None
-
-        paragraphs = [p.strip().replace("\n", "") for p in raw_text.split("\n\n") if p.strip()]
-
-        n225_info, topix_info, market_info = "", "", ""
-
-        for p in paragraphs:
-            if "日経平均株価" in p and not n225_info:
-                n225_info = p
-            elif ("東証株価指数" in p or "ＴＯＰＩＸ" in p) and not topix_info:
-                topix_info = p
-            elif "売買代金" in p and not market_info:
-                market_info = p
-
-        desc_parts = []
-        if n225_info:
-            desc_parts.append(f"【日経平均の動き】\n{n225_info[:250]}{'...' if len(n225_info) > 250 else ''}")
-        if topix_info:
-            desc_parts.append(f"【TOPIXの動き】\n{topix_info[:200]}{'...' if len(topix_info) > 200 else ''}")
-        if market_info:
-            desc_parts.append(f"【市場統計】\n{market_info}")
-
-        desc = "\n\n".join(desc_parts) if desc_parts else raw_text[:600] + "..."
-
-    except Exception as e:
-        print(f"❌ MUFG市況スクレイピングエラー: {e}")
-        return None
-
-    title = f"📈 本日の日本株式市況要約\n({today_md_slash} 夕方更新)"
-    return create_flex_bubble(
-        "🇯🇵 本日の株式市況", "#16A085", title, desc,
-        footer_text="🔗 ソース: 三菱UFJモルガン・スタンレー証券",
-        footer_url="https://www.sc.mufg.jp/market/today_market/index.html"
-    )
-
 def get_fgi_bubble():
     score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -735,11 +664,7 @@ def main():
             print("🟢 朝の通知：本日すでに通知済みのためスキップします。")
 
     elif 16 <= now_hour <= 19:
-        # ★ 夕方の部（日本市場 ＋ 米国休場お知らせ）
-        if not is_japanese_holiday(now_jst):
-            b_mufg = get_mufg_market_bubble(now_jst)
-            if b_mufg: bubbles.append(b_mufg)
-            
+        # ★ 夕方の部（米国休場お知らせのみ）
         if is_us_holiday(now_jst):
             b_us_holiday = get_us_holiday_bubble(now_jst)
             if b_us_holiday: bubbles.append(b_us_holiday)
@@ -766,8 +691,6 @@ def main():
             elif now_hour == 8:
                 mark_morning_as_notified(now_jst)
             elif 16 <= now_hour <= 19:
-                if any("本日の株式市況" in str(b) for b in bubbles):
-                    mark_mufg_as_notified(now_jst)
                 if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
                     mark_us_holiday_as_notified(now_jst)
             elif now_hour >= 20:
