@@ -13,9 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト送信モード（True: 自分のみに送信）
-# ※表示確認が完了したら False へ変更してください。
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -783,22 +782,6 @@ def main():
     bubbles = []
 
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
-
-    # ==========================================
-    # ★ テスト専用：時間帯や閾値を無視して強制追加
-    # ==========================================
-    if DEBUG_MODE:
-        print("🛠️ テストモード稼働中：国旗とアイコン追加の表示確認を行います。")
-        b_touraku_test = get_updown_ratio_bubble(check_threshold=False)
-        b_fgi_test = get_fgi_bubble()
-        if b_touraku_test: bubbles.append(b_touraku_test)
-        if b_fgi_test: bubbles.append(b_fgi_test)
-        
-        if bubbles:
-            send_carousel_message(bubbles)
-        else:
-            print("エラー: テスト用バブルの生成に失敗しました。")
-        return
 
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
