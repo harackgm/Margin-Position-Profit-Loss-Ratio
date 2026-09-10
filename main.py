@@ -13,8 +13,9 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト送信モード（True: 自分のみに送信）
+# ※騰落レシオの表示テストです。確認できたら False に戻して保存してください。
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -39,6 +40,16 @@ def save_state(data):
             json.dump(data, f)
     except Exception as e:
         print(f"❌ 状態記録エラー: {e}")
+
+def is_mufg_already_notified(dt_jst):
+    return load_state().get("last_mufg_date") == dt_jst.strftime('%Y-%m-%d')
+
+def mark_mufg_as_notified(dt_jst):
+    today_str = dt_jst.strftime('%Y-%m-%d')
+    data = load_state()
+    data["last_mufg_date"] = today_str
+    save_state(data)
+    print(f"🔒 連投防止: 本日({today_str})のMUFG市況通知を記録しました。")
 
 def is_us_holiday_already_notified(dt_jst):
     return load_state().get("last_us_holiday_date") == dt_jst.strftime('%Y-%m-%d')
@@ -288,6 +299,77 @@ def get_margin_bubble():
         footer_text="🔗 ソース: トレーダーズ・ウェブ",
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
+
+# ★ 修正版：25日騰落レシオ取得関数（HTML構造に完全対応）
+def get_updown_ratio_bubble():
+    try:
+        url = "https://nikkei225jp.com/data/touraku.php"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(url, headers=headers, timeout=15)
+        res.encoding = res.apparent_encoding or "utf-8"
+        soup = BeautifulSoup(res.text, "html.parser")
+        
+        latest_date = ""
+        latest_value = None
+        
+        # ターゲットとなる特定のテーブル「id="datatbl"」のみを検索
+        table = soup.find("table", id="datatbl")
+        if table:
+            rows = table.find_all("tr")
+            # 1行目はヘッダ（th）なので、データ行を探す
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) >= 7:
+                    date_text = cells[0].get_text(strip=True)
+                    ratio_text = cells[6].get_text(strip=True) # 7番目のセルが25日レシオ
+                    
+                    if re.match(r"\d{4}-\d{2}-\d{2}", date_text):
+                        val_str = ratio_text.replace("%", "").replace(",", "")
+                        try:
+                            latest_value = float(val_str)
+                            latest_date = date_text
+                            break # 最新行の1件目のみ取得してループ終了
+                        except ValueError:
+                            continue
+
+        if latest_value is None:
+            print("⚠️ 騰落レシオの数値が取得できませんでした。サイト構造の確認が必要です。")
+            return None
+
+        # 判定ロジック
+        jst = timezone(timedelta(hours=9))
+        is_sunday = (datetime.now(jst).weekday() == 6)
+        is_overbought = (latest_value >= 120.0)
+        is_oversold = (latest_value <= 80.0)
+
+        # 日曜、または平日で閾値を超えている場合のみ通知
+        if not (is_sunday or is_overbought or is_oversold):
+            return None
+
+        # 色とテキストの決定
+        if is_overbought:
+            color = "#E74C3C" # 赤
+            header = "🔥 騰落レシオ25日 (過熱水域)"
+            desc = "25日騰落レシオが120%を超えました。市場全体が「買われすぎ（過熱）」の状態にあり、利益確定売りによる短期的な下落（調整）に警戒が必要です。"
+        elif is_oversold:
+            color = "#2980B9" # 青
+            header = "🧊 騰落レシオ25日 (底値圏)"
+            desc = "25日騰落レシオが80%を下回りました。市場全体が「売られすぎ（底値圏）」の状態にあり、自律反発を狙った絶好の買い場が近づいている可能性があります。"
+        else:
+            color = "#27AE60" # 緑（平穏・日曜のみ表示）
+            header = "📊 騰落レシオ25日"
+            desc = "現在の市場は過熱感もなく、売られすぎでもない平穏な水準（80%〜120%の間）にあります。"
+
+        title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
+
+        return create_flex_bubble(
+            header, color, title, desc,
+            footer_text="🔗 ソース: 日経平均 株価 AI予想",
+            footer_url="https://nikkei225jp.com/data/touraku.php"
+        )
+    except Exception as e:
+        print(f"❌ 騰落レシオ取得エラー: {e}")
+        return None
 
 def get_anomaly_bubble(dt_jst):
     today_date = dt_jst.date()
@@ -643,8 +725,10 @@ def main():
         if not is_sunday_already_notified(now_jst):
             b_margin = get_margin_bubble()
             b_fgi = get_fgi_bubble()
+            b_touraku = get_updown_ratio_bubble() # ★追加：日曜は無条件取得
             if b_margin: bubbles.append(b_margin)
             if b_fgi: bubbles.append(b_fgi)
+            if b_touraku: bubbles.append(b_touraku)
         else:
             print("🟢 日曜通知：本日すでに通知済みのためスキップします。")
 
@@ -657,9 +741,11 @@ def main():
                 b_sq = get_sq_bubble(now_jst)
                 b_margin = get_margin_bubble()
                 b_anomaly = get_anomaly_bubble(now_jst)
+                b_touraku = get_updown_ratio_bubble() # ★追加：平日は閾値超えのみ
                 if b_sq: bubbles.append(b_sq)
                 if b_margin: bubbles.append(b_margin)
                 if b_anomaly: bubbles.append(b_anomaly)
+                if b_touraku: bubbles.append(b_touraku)
         else:
             print("🟢 朝の通知：本日すでに通知済みのためスキップします。")
 
