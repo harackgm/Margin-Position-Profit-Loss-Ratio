@@ -14,7 +14,6 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
-# ※確認成功後に False へ変更して本番運用へ切り替えてください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -290,59 +289,47 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 100%確定版：JavaScript配列要素を直接正規表現で抽出・計算
+# ★ メーター表示対応版：騰落レシオ
 def get_updown_ratio_bubble(force_test=False):
     latest_date = ""
     latest_value = None
-    
-    # サーバー負荷軽減のゆらぎスリープ（1〜3秒）
     time.sleep(random.randint(1, 3))
 
     try:
         data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
         headers_nikkei = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://nikkei225jp.com/data/touraku.php"
         }
         res = requests.get(data_url, headers=headers_nikkei, timeout=15)
-        print(f"🔍 騰落レシオ (nikkei225jp) HTTPステータス: {res.status_code}")
-        
         if res.status_code == 200:
-            # 配列要素 [timestamp, ..., ..., ..., ..., up, down, ...] を正規表現で全抽出
             matches = re.findall(r'\[\s*(\d{12,13})\s*,([^\]]+)\]', res.text)
-            
             valid_rows = []
             for ts_str, rest in matches:
                 parts = [p.strip() for p in rest.split(',')]
                 if len(parts) >= 6:
                     try:
                         ts = int(ts_str) / 1000.0
-                        up = float(parts[4])   # index 5 (index 0はts) -> 値上がり数
-                        down = float(parts[5]) # index 6 (index 0はts) -> 値下がり数
+                        up = float(parts[4])
+                        down = float(parts[5])
                         valid_rows.append((ts, up, down))
                     except ValueError:
                         continue
             
             if len(valid_rows) >= 25:
-                # タイムスタンプ順にソートして直近25営業日を取得
                 valid_rows.sort(key=lambda x: x[0])
                 recent_25 = valid_rows[-25:]
-                
                 up_sum = sum(item[1] for item in recent_25)
                 down_sum = sum(item[2] for item in recent_25)
-                
                 if down_sum > 0:
                     latest_value = round((up_sum / down_sum) * 100.0, 2)
                     last_ts = recent_25[-1][0]
                     dt = datetime.fromtimestamp(last_ts, tz=timezone(timedelta(hours=9)))
                     latest_date = dt.strftime('%Y-%m-%d')
-                    print(f"🚀 騰落レシオ25日計算成功: {latest_value}% ({latest_date})")
-
     except Exception as e:
         print(f"⚠️ 騰落レシオ解析例外: {e}")
 
     if latest_value is None:
-        print("⚠️ 騰落レシオの数値が取得できませんでした。")
         return None
 
     # 判定ロジック
@@ -351,29 +338,107 @@ def get_updown_ratio_bubble(force_test=False):
     is_overbought = (latest_value >= 120.0)
     is_oversold = (latest_value <= 80.0)
 
-    # ★テスト時は強制表示
     if not (is_sunday or is_overbought or is_oversold or force_test):
         return None
 
-    # 色とテキストの決定
-    if is_overbought:
-        color = "#E74C3C" # 赤
-        header = "🔥 騰落レシオ25日 (過熱水域)"
-        desc = "25日騰落レシオが120%を超えました。市場全体が「買われすぎ（過熱）」の状態にあり、利益確定売りによる短期的な下落（調整）に警戒が必要です。"
-    elif is_oversold:
-        color = "#2980B9" # 青
-        header = "🧊 騰落レシオ25日 (底値圏)"
-        desc = "25日騰落レシオが80%を下回りました。市場全体が「売られすぎ（底値圏）」の状態にあり、自律反発を狙った絶好の買い場が近づいている可能性があります。"
-    else:
-        color = "#27AE60" # 緑（平穏・日曜/テスト時のみ表示）
-        header = "📊 騰落レシオ25日"
-        desc = "現在の市場は過熱感もなく、売られすぎでもない平穏な水準（80%〜120%の間）にあります。"
+    # ★ 7分割判定とメーター色定義
+    idx = 0
+    if latest_value < 70.0: idx = 0
+    elif latest_value < 80.0: idx = 1
+    elif latest_value < 90.0: idx = 2
+    elif latest_value < 110.0: idx = 3
+    elif latest_value < 120.0: idx = 4
+    elif latest_value < 140.0: idx = 5
+    else: idx = 6
 
-    title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
+    # F&Gと共通の色配列（左から：濃赤、赤、橙、灰、薄緑、緑、濃緑）
+    colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
+    current_color = colors[idx]
+
+    custom_ratings = [
+        "EX FEAR（超底値圏）",
+        "FEAR（底値圏）",
+        "FEAR（やや売られ過ぎ）",
+        "NEUTRAL（中立・平穏）",
+        "GREED（やや買われ過ぎ）",
+        "GREED（買われ過ぎ・天井圏）",
+        "EX GREED（超過熱）"
+    ]
+    current_rating_text = custom_ratings[idx]
+
+    if idx == 0: desc = "相場は総悲観の底値圏です。絶好の買い場（仕込み時）が到来しています。"
+    elif idx == 1: desc = "売られ過ぎのサインが出ています。押し目買いを検討する好機です。"
+    elif idx == 2: desc = "やや売られ過ぎの傾向があります。自律反発に向けた準備期間です。"
+    elif idx == 3: desc = "売り買いの勢力が拮抗しており、相場はニュートラル（中立）な状態です。"
+    elif idx == 4: desc = "相場がやや強気です。新規の買いは少し慎重に行う時期です。"
+    elif idx == 5: desc = "相場は買われ過ぎ（天井圏）に達しています。利益確定売りを検討してください。"
+    else: desc = "歴史的な超過熱状態です。いつ急落してもおかしくないため厳重警戒が必要です。"
+
+    title_structures = [
+        {"type": "text", "text": f"現在値: 【 {latest_value}% 】", "weight": "bold", "size": "xl", "color": "#111111"},
+        {"type": "text", "text": f"({latest_date})", "size": "md", "color": "#555555", "margin": "xs"},
+        {
+            "type": "box", "layout": "horizontal", "margin": "md",
+            "contents": [
+                {"type": "text", "text": "判定: ", "weight": "bold", "size": "lg", "color": "#111111", "flex": 0},
+                {"type": "text", "text": f"{current_rating_text}", "weight": "bold", "size": "md", "color": current_color, "flex": 1, "wrap": True, "align": "center"}
+            ]
+        }
+    ]
+
+    legend_info = [
+        ("濃赤:", " 70%未満 (絶好の買い場)"),
+        ("赤:", " 70〜79% (底値圏)"),
+        ("橙:", " 80〜89% (やや売られ過ぎ)"),
+        ("灰:", " 90〜109% (中立・平穏)"),
+        ("薄緑:", " 110〜119% (やや買われ過ぎ)"),
+        ("緑:", " 120〜139% (天井圏・過熱)"),
+        ("濃緑:", " 140%以上 (暴落警戒)")
+    ]
+
+    marker_boxes = []
+    bar_boxes = []
+    icon_boxes = []
+
+    for i in range(7):
+        marker_text = "▼" if i == idx else " "
+        marker_boxes.append({"type": "text", "text": marker_text, "size": "sm", "color": "#111111", "align": "center", "weight": "bold", "flex": 1})
+        height = "16px" if i == idx else "6px"
+        bar_boxes.append({"type": "box", "layout": "vertical", "backgroundColor": colors[i], "height": height, "flex": 1, "cornerRadius": "3px", "contents": []})
+        
+        icon_text = " "
+        if i == 0:
+            icon_text = "😱"
+        elif i == 3:
+            icon_text = "😐"
+        elif i == 6:
+            icon_text = "😇"
+        icon_boxes.append({"type": "text", "text": icon_text, "size": "xl", "align": "center", "flex": 1})
+
+    legend_boxes = [{"type": "text", "text": "💡 【メーターの凡例】", "size": "sm", "color": "#555555", "weight": "bold", "margin": "sm"}]
+    for i in range(7):
+        color_label, text_body = legend_info[i]
+        is_current = (i == idx)
+        legend_boxes.append({
+            "type": "box", "layout": "horizontal", "margin": "xs",
+            "contents": [
+                {"type": "text", "text": color_label, "color": colors[i], "size": "xs", "weight": "bold", "flex": 0},
+                {"type": "text", "text": text_body, "color": "#111111", "size": "xs", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
+            ]
+        })
+
+    extra_contents = [
+        {"type": "separator", "margin": "md"},
+        {"type": "box", "layout": "horizontal", "contents": marker_boxes, "spacing": "xs", "margin": "md"},
+        {"type": "box", "layout": "horizontal", "contents": bar_boxes, "spacing": "xs", "alignItems": "center"},
+        {"type": "box", "layout": "horizontal", "contents": icon_boxes, "spacing": "xs", "margin": "sm"},
+        {"type": "box", "layout": "vertical", "contents": legend_boxes, "margin": "lg"}
+    ]
 
     return create_flex_bubble(
-        header, color, title, desc,
+        "📊 騰落レシオ25日", current_color, title_structures, desc,
         footer_text="🔗 ソース: 日経平均 株価 AI予想",
+        extra_contents=extra_contents,
         footer_url="https://nikkei225jp.com/data/touraku.php"
     )
 
@@ -774,6 +839,7 @@ def main():
     # ★ 送信と状態記録
     if bubbles:
         success = send_carousel_message(bubbles)
+        # テスト時（強制追加）は重複防止ロックをかけない
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
