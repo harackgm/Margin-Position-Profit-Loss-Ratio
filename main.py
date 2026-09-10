@@ -290,7 +290,7 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 毎晩配信用：騰落レシオ（豆知識追加）
+# ★ 毎晩配信用：騰落レシオ（凡例サイズ拡大）
 def get_updown_ratio_bubble(force_test=False):
     latest_date = ""
     latest_value = None
@@ -342,7 +342,6 @@ def get_updown_ratio_bubble(force_test=False):
     if not (is_sunday or is_overbought or is_oversold or force_test):
         return None
 
-    # ★ 7分割判定とメーター色定義
     idx = 0
     if latest_value < 70.0: idx = 0
     elif latest_value < 80.0: idx = 1
@@ -352,7 +351,6 @@ def get_updown_ratio_bubble(force_test=False):
     elif latest_value < 140.0: idx = 5
     else: idx = 6
 
-    # F&Gと共通の色配列（左から：濃赤、赤、橙、灰、薄緑、緑、濃緑）
     colors = ["#8B0000", "#E74C3C", "#F39C12", "#95A5A6", "#2ECC71", "#27AE60", "#1E8449"]
     current_color = colors[idx]
 
@@ -367,7 +365,6 @@ def get_updown_ratio_bubble(force_test=False):
     ]
     current_rating_text = custom_ratings[idx]
 
-    # ★ 状態ごとのテキスト定義
     if idx == 0: status_desc = "相場は総悲観の底値圏です。絶好の買い場（仕込み時）が到来しています。"
     elif idx == 1: status_desc = "売られ過ぎのサインが出ています。押し目買いを検討する好機です。"
     elif idx == 2: status_desc = "やや売られ過ぎの傾向があります。自律反発に向けた準備期間です。"
@@ -376,7 +373,6 @@ def get_updown_ratio_bubble(force_test=False):
     elif idx == 5: status_desc = "相場は買われ過ぎ（天井圏）に達しています。利益確定売りを検討してください。"
     else: status_desc = "歴史的な超過熱状態です。いつ急落してもおかしくないため厳重警戒が必要です。"
 
-    # ★ 豆知識を共通で追加
     desc = f"{status_desc}\n\n💡 【豆知識：騰落レシオとは？】\n市場の「買われすぎ」「売られすぎ」を測る温度計のような指標です。100%が中立（売り買い互角）で、120%を超えると過熱による下落警戒、80%を割ると底値圏で反発のチャンスとされています。"
 
     title_structures = [
@@ -427,8 +423,9 @@ def get_updown_ratio_bubble(force_test=False):
         legend_boxes.append({
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
-                {"type": "text", "text": color_label, "color": colors[i], "size": "xs", "weight": "bold", "flex": 0},
-                {"type": "text", "text": text_body, "color": "#111111", "size": "xs", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
+                # ★ 凡例の文字サイズを sm に変更
+                {"type": "text", "text": color_label, "color": colors[i], "size": "sm", "weight": "bold", "flex": 0},
+                {"type": "text", "text": text_body, "color": "#111111", "size": "sm", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
             ]
         })
 
@@ -590,7 +587,6 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
-    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
@@ -606,6 +602,7 @@ def get_gmo_bubble():
         footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
     )
 
+# ★ Fear & Greed Index (凡例サイズ拡大)
 def get_fgi_bubble():
     score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -708,8 +705,9 @@ def get_fgi_bubble():
         legend_boxes.append({
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
-                {"type": "text", "text": color_label, "color": colors[i], "size": "xs", "weight": "bold", "flex": 0},
-                {"type": "text", "text": text_body, "color": "#111111", "size": "xs", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
+                # ★ 凡例の文字サイズを sm に変更
+                {"type": "text", "text": color_label, "color": colors[i], "size": "sm", "weight": "bold", "flex": 0},
+                {"type": "text", "text": text_body, "color": "#111111", "size": "sm", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
             ]
         })
 
@@ -743,7 +741,6 @@ def send_carousel_message(bubbles):
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return False
 
-    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(bubbles) > 10:
         print(f"⚠️ 大量通知ストッパー作動: バブル数が {len(bubbles)} 件のため送信を一時停止します。")
         return False
@@ -848,7 +845,6 @@ def main():
 
     # ★ 送信と状態記録
     if bubbles:
-        # 強制テスト時は重複通知を避けるため、状態の更新(mark_as_notified)は行いません。
         success = send_carousel_message(bubbles)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
