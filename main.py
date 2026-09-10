@@ -40,16 +40,6 @@ def save_state(data):
     except Exception as e:
         print(f"❌ 状態記録エラー: {e}")
 
-def is_mufg_already_notified(dt_jst):
-    return load_state().get("last_mufg_date") == dt_jst.strftime('%Y-%m-%d')
-
-def mark_mufg_as_notified(dt_jst):
-    today_str = dt_jst.strftime('%Y-%m-%d')
-    data = load_state()
-    data["last_mufg_date"] = today_str
-    save_state(data)
-    print(f"🔒 連投防止: 本日({today_str})のMUFG市況通知を記録しました。")
-
 def is_us_holiday_already_notified(dt_jst):
     return load_state().get("last_us_holiday_date") == dt_jst.strftime('%Y-%m-%d')
 
@@ -299,10 +289,10 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ テスト用に force_test 引数を追加
+# ★ 修正版：25日騰落レシオ取得関数（情報源を確実な「株探」へ変更）
 def get_updown_ratio_bubble(force_test=False):
     try:
-        url = "https://nikkei225jp.com/data/touraku.php"
+        url = "https://kabutan.jp/stock/touraku?bmark=1"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         res = requests.get(url, headers=headers, timeout=15)
         res.encoding = res.apparent_encoding or "utf-8"
@@ -311,24 +301,38 @@ def get_updown_ratio_bubble(force_test=False):
         latest_date = ""
         latest_value = None
         
-        # ターゲットとなる特定のテーブル「id="datatbl"」のみを検索
-        table = soup.find("table", id="datatbl")
-        if table:
-            rows = table.find_all("tr")
+        # テーブル群から「騰落レシオ」を含むものを特定
+        tables = soup.find_all("table")
+        target_table = None
+        for tbl in tables:
+            if "騰落レシオ" in tbl.get_text() and "25日" in tbl.get_text():
+                target_table = tbl
+                break
+
+        if target_table:
+            # 25日レシオの列位置を動的に特定（通常は4番目, index=3）
+            ratio_idx = 3 
+            header_row = target_table.find("tr")
+            if header_row:
+                ths = header_row.find_all(["th", "td"])
+                for i, th in enumerate(ths):
+                    if "25日" in th.get_text():
+                        ratio_idx = i
+                        break
+
+            # 最新のデータ行を探す
+            rows = target_table.find_all("tr")
             for row in rows:
                 cells = row.find_all("td")
-                if len(cells) >= 7:
+                if len(cells) > ratio_idx:
                     date_text = cells[0].get_text(strip=True)
-                    ratio_text = cells[6].get_text(strip=True) # 7番目のセルが25日レシオ
-                    
-                    if re.match(r"\d{4}-\d{2}-\d{2}", date_text):
-                        val_str = ratio_text.replace("%", "").replace(",", "")
-                        try:
-                            latest_value = float(val_str)
-                            latest_date = date_text
-                            break 
-                        except ValueError:
-                            continue
+                    val_str = cells[ratio_idx].get_text(strip=True).replace("%", "").replace(",", "")
+                    try:
+                        latest_value = float(val_str)
+                        latest_date = date_text
+                        break # 最新の1件目を取得したら抜ける
+                    except ValueError:
+                        continue
 
         if latest_value is None:
             print("⚠️ 騰落レシオの数値が取得できませんでした。サイト構造の確認が必要です。")
@@ -362,8 +366,8 @@ def get_updown_ratio_bubble(force_test=False):
 
         return create_flex_bubble(
             header, color, title, desc,
-            footer_text="🔗 ソース: 日経平均 株価 AI予想",
-            footer_url="https://nikkei225jp.com/data/touraku.php"
+            footer_text="🔗 ソース: 株探（Kabutan）",
+            footer_url="https://kabutan.jp/stock/touraku?bmark=1"
         )
     except Exception as e:
         print(f"❌ 騰落レシオ取得エラー: {e}")
@@ -719,7 +723,6 @@ def main():
     if b_touraku_test:
         bubbles.append(b_touraku_test)
 
-    # 以降は通常の時間帯判定ですが、上記で必ず bubbles に1件入るため、必ず通知が実行されます。
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
@@ -764,7 +767,6 @@ def main():
 
     # ★ 送信と状態記録
     if bubbles:
-        # 強制テスト時は重複通知を避けるため、状態の更新(mark_as_notified)は行いません。
         success = send_carousel_message(bubbles)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
