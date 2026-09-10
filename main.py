@@ -14,7 +14,6 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
-# ※騰落レシオの表示テストです。確認できたら False に戻して保存してください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -300,8 +299,8 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 修正版：25日騰落レシオ取得関数（HTML構造に完全対応）
-def get_updown_ratio_bubble():
+# ★ テスト用に force_test 引数を追加
+def get_updown_ratio_bubble(force_test=False):
     try:
         url = "https://nikkei225jp.com/data/touraku.php"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -316,7 +315,6 @@ def get_updown_ratio_bubble():
         table = soup.find("table", id="datatbl")
         if table:
             rows = table.find_all("tr")
-            # 1行目はヘッダ（th）なので、データ行を探す
             for row in rows:
                 cells = row.find_all("td")
                 if len(cells) >= 7:
@@ -328,7 +326,7 @@ def get_updown_ratio_bubble():
                         try:
                             latest_value = float(val_str)
                             latest_date = date_text
-                            break # 最新行の1件目のみ取得してループ終了
+                            break 
                         except ValueError:
                             continue
 
@@ -342,8 +340,8 @@ def get_updown_ratio_bubble():
         is_overbought = (latest_value >= 120.0)
         is_oversold = (latest_value <= 80.0)
 
-        # 日曜、または平日で閾値を超えている場合のみ通知
-        if not (is_sunday or is_overbought or is_oversold):
+        # ★テスト時は閾値・曜日を無視して強制表示する
+        if not (is_sunday or is_overbought or is_oversold or force_test):
             return None
 
         # 色とテキストの決定
@@ -356,7 +354,7 @@ def get_updown_ratio_bubble():
             header = "🧊 騰落レシオ25日 (底値圏)"
             desc = "25日騰落レシオが80%を下回りました。市場全体が「売られすぎ（底値圏）」の状態にあり、自律反発を狙った絶好の買い場が近づいている可能性があります。"
         else:
-            color = "#27AE60" # 緑（平穏・日曜のみ表示）
+            color = "#27AE60" # 緑（平穏・日曜/テスト時のみ表示）
             header = "📊 騰落レシオ25日"
             desc = "現在の市場は過熱感もなく、売られすぎでもない平穏な水準（80%〜120%の間）にあります。"
 
@@ -711,29 +709,31 @@ def main():
     now_jst = datetime.now(jst)
     bubbles = []
 
+    print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
+
+    # ==========================================
+    # ★ テスト専用：時間帯や閾値を無視して「騰落レシオ」を強制追加
+    # ==========================================
+    print("🛠️ テストモード稼働中：騰落レシオを強制的に取得・追加します。")
+    b_touraku_test = get_updown_ratio_bubble(force_test=True)
+    if b_touraku_test:
+        bubbles.append(b_touraku_test)
+
+    # 以降は通常の時間帯判定ですが、上記で必ず bubbles に1件入るため、必ず通知が実行されます。
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
-    print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
-
     if today_wd == 5:
         print("☕ 土曜日のためチェックをスキップします。")
-        return
-
-    # 日曜の部
-    if today_wd == 6:
+    elif today_wd == 6:
         if not is_sunday_already_notified(now_jst):
             b_margin = get_margin_bubble()
             b_fgi = get_fgi_bubble()
-            b_touraku = get_updown_ratio_bubble() # ★追加：日曜は無条件取得
             if b_margin: bubbles.append(b_margin)
             if b_fgi: bubbles.append(b_fgi)
-            if b_touraku: bubbles.append(b_touraku)
         else:
             print("🟢 日曜通知：本日すでに通知済みのためスキップします。")
-
     elif now_hour == 8:
-        # ★ 朝の部
         if not is_morning_already_notified(now_jst):
             if is_japanese_holiday(now_jst):
                 print("🇯🇵 日本祝日のため朝の通知をスキップします。")
@@ -741,22 +741,16 @@ def main():
                 b_sq = get_sq_bubble(now_jst)
                 b_margin = get_margin_bubble()
                 b_anomaly = get_anomaly_bubble(now_jst)
-                b_touraku = get_updown_ratio_bubble() # ★追加：平日は閾値超えのみ
                 if b_sq: bubbles.append(b_sq)
                 if b_margin: bubbles.append(b_margin)
                 if b_anomaly: bubbles.append(b_anomaly)
-                if b_touraku: bubbles.append(b_touraku)
         else:
             print("🟢 朝の通知：本日すでに通知済みのためスキップします。")
-
     elif 16 <= now_hour <= 19:
-        # ★ 夕方の部（米国休場お知らせのみ）
         if is_us_holiday(now_jst):
             b_us_holiday = get_us_holiday_bubble(now_jst)
             if b_us_holiday: bubbles.append(b_us_holiday)
-
     elif now_hour >= 20:
-        # ★ 夜の部（米国市場のみ。休場なら何もしない）
         if not is_night_already_notified(now_jst):
             if not is_us_holiday(now_jst):
                 b_fomc = get_fomc_bubble(now_jst)
@@ -770,17 +764,8 @@ def main():
 
     # ★ 送信と状態記録
     if bubbles:
+        # 強制テスト時は重複通知を避けるため、状態の更新(mark_as_notified)は行いません。
         success = send_carousel_message(bubbles)
-        if success:
-            if today_wd == 6:
-                mark_sunday_as_notified(now_jst)
-            elif now_hour == 8:
-                mark_morning_as_notified(now_jst)
-            elif 16 <= now_hour <= 19:
-                if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
-                    mark_us_holiday_as_notified(now_jst)
-            elif now_hour >= 20:
-                mark_night_as_notified(now_jst)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
