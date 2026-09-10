@@ -14,7 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
-# ※テストが成功したら False に変更して保存してください。
+# ※テスト成功後に False へ変更してください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -242,7 +242,7 @@ def get_sq_bubble(dt_jst):
 def get_margin_bubble():
     try:
         url = "https://www.traders.co.jp/margin_derivatives/margin_transition"
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, "html.parser")
         latest_date, latest_value = "", None
@@ -290,55 +290,62 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 100%確実版：nikkei225jpの生データエンドポイントから直接取得
+# ★ 安定動作版：トレーダーズ・ウェブ（通信実績のあるドメイン）から騰落レシオを取得
 def get_updown_ratio_bubble(force_test=False):
     latest_date = ""
     latest_value = None
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
-    # 第1方法: nikkei225jp の生データエンドポイント直接取得
+    # 第1方法: トレーダーズ・ウェブ (traders.co.jp)
     try:
-        data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
-        res = requests.get(data_url, headers=headers, timeout=15)
+        url = "https://www.traders.co.jp/market_ratio"
+        res = requests.get(url, headers=headers, timeout=15)
+        print(f"🔍 騰落レシオ (traders.co.jp) HTTPステータス: {res.status_code}")
         if res.status_code == 200:
-            json_text = re.sub(r'^\s*var\s+\w+\s*=\s*', '', res.text.strip()).rstrip(';')
-            data = json.loads(json_text)
-            if isinstance(data, list) and len(data) > 0:
-                latest = data[-1] # 最新日のデータ
-                ts = latest[0] / 1000.0
-                dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=9)))
-                latest_date = dt.strftime('%Y-%m-%d')
-                
-                # 値上がり(index 5)と値下がり(index 6)から過去25日間の移動平均を計算、または直近値
-                # 配列から過去25日分を取得して計算
-                if len(data) >= 25:
+            soup = BeautifulSoup(res.text, "html.parser")
+            for row in soup.find_all("tr"):
+                txt = row.get_text(" ", strip=True)
+                if "25日" in txt or "/" in txt:
+                    cells = row.find_all(["td", "th"])
+                    for cell in cells:
+                        val_txt = cell.get_text(strip=True).replace("%", "").replace(",", "")
+                        try:
+                            v = float(val_txt)
+                            if 50.0 <= v <= 200.0: # 騰落レシオとして適正な範囲
+                                latest_value = v
+                                date_match = re.search(r'\d{1,2}/\d{1,2}', txt)
+                                if date_match:
+                                    latest_date = date_match.group(0)
+                                break
+                        except ValueError:
+                            continue
+                if latest_value is not None:
+                    break
+    except Exception as e:
+        print(f"⚠️ トレーダーズ・ウェブ取得例外: {e}")
+
+    # 第2方法: バックアップ (nikkei225jp JSON直通)
+    if latest_value is None:
+        try:
+            data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
+            res = requests.get(data_url, headers=headers, timeout=15)
+            print(f"🔍 騰落レシオ (nikkei225jp JSON) HTTPステータス: {res.status_code}")
+            if res.status_code == 200:
+                json_text = re.sub(r'^\s*var\s+\w+\s*=\s*', '', res.text.strip()).rstrip(';')
+                data = json.loads(json_text)
+                if isinstance(data, list) and len(data) >= 25:
                     up_sum = sum(item[5] for item in data[-25:])
                     down_sum = sum(item[6] for item in data[-25:])
                     if down_sum > 0:
                         latest_value = round((up_sum / down_sum) * 100.0, 2)
-    except Exception as e:
-        print(f"⚠️ 生データ取得スキップ: {e}")
-
-    # 第2方法: 多重バックアップ（株探のHTML解析）
-    if latest_value is None:
-        try:
-            kabutan_url = "https://kabutan.jp/stock/touraku?bmark=1"
-            res_k = requests.get(kabutan_url, headers=headers, timeout=15)
-            if res_k.status_code == 200:
-                soup = BeautifulSoup(res_k.text, "html.parser")
-                for row in soup.find_all("tr"):
-                    txt = row.get_text(" ", strip=True)
-                    m_date = re.search(r'(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}/\d{1,2})', txt)
-                    m_nums = re.findall(r'\b\d{2,3}\.\d{1,2}\b', txt)
-                    if m_date and m_nums:
-                        latest_date = m_date.group(1)
-                        latest_value = float(m_nums[0])
-                        break
+                        ts = data[-1][0] / 1000.0
+                        dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=9)))
+                        latest_date = dt.strftime('%m/%d')
         except Exception as e:
-            print(f"⚠️ 株探スキップ: {e}")
+            print(f"⚠️ JSON直通取得例外: {e}")
 
     if latest_value is None:
-        print("⚠️ 騰落レシオの数値が取得できませんでした。")
+        print("⚠️ 騰落レシオの数値が全ソースから取得できませんでした。")
         return None
 
     # 判定ロジック
@@ -369,8 +376,8 @@ def get_updown_ratio_bubble(force_test=False):
 
     return create_flex_bubble(
         header, color, title, desc,
-        footer_text="🔗 ソース: 日経平均 株価 AI予想",
-        footer_url="https://nikkei225jp.com/data/touraku.php"
+        footer_text="🔗 ソース: トレーダーズ・ウェブ",
+        footer_url="https://www.traders.co.jp/market_ratio"
     )
 
 def get_anomaly_bubble(dt_jst):
