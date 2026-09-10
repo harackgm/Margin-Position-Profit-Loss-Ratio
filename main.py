@@ -436,7 +436,7 @@ def get_updown_ratio_bubble(check_threshold=False):
     ]
 
     return create_flex_bubble(
-        "🇯🇵 騰落レシオ25日", current_color, title_structures, desc,
+        "🇯🇵 騰落レシオ25日 📊", current_color, title_structures, desc,
         footer_text="🔗 ソース: 日経平均 株価 AI予想",
         extra_contents=extra_contents,
         footer_url="https://nikkei225jp.com/data/touraku.php"
@@ -585,7 +585,6 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
-    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
@@ -723,7 +722,7 @@ def get_fgi_bubble():
     ]
 
     return create_flex_bubble(
-        "🇺🇸 Fear & Greed Index", current_color, title_structures, desc,
+        "🇺🇸 Fear & Greed Index 🧭", current_color, title_structures, desc,
         footer_text="🔗 ソース: CNN Markets",
         extra_contents=extra_contents,
         footer_url="https://edition.cnn.com/markets/fear-and-greed"
@@ -789,7 +788,7 @@ def main():
     # ★ テスト専用：時間帯や閾値を無視して強制追加
     # ==========================================
     if DEBUG_MODE:
-        print("🛠️ テストモード稼働中：国旗追加の表示確認を行います。")
+        print("🛠️ テストモード稼働中：国旗とアイコン追加の表示確認を行います。")
         b_touraku_test = get_updown_ratio_bubble(check_threshold=False)
         b_fgi_test = get_fgi_bubble()
         if b_touraku_test: bubbles.append(b_touraku_test)
