@@ -14,6 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
+# ※表示確認が完了したら False へ変更してください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -289,7 +290,7 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ メーター表示対応版：騰落レシオ
+# ★ 毎晩配信用：騰落レシオ（豆知識追加）
 def get_updown_ratio_bubble(force_test=False):
     latest_date = ""
     latest_value = None
@@ -366,13 +367,17 @@ def get_updown_ratio_bubble(force_test=False):
     ]
     current_rating_text = custom_ratings[idx]
 
-    if idx == 0: desc = "相場は総悲観の底値圏です。絶好の買い場（仕込み時）が到来しています。"
-    elif idx == 1: desc = "売られ過ぎのサインが出ています。押し目買いを検討する好機です。"
-    elif idx == 2: desc = "やや売られ過ぎの傾向があります。自律反発に向けた準備期間です。"
-    elif idx == 3: desc = "売り買いの勢力が拮抗しており、相場はニュートラル（中立）な状態です。"
-    elif idx == 4: desc = "相場がやや強気です。新規の買いは少し慎重に行う時期です。"
-    elif idx == 5: desc = "相場は買われ過ぎ（天井圏）に達しています。利益確定売りを検討してください。"
-    else: desc = "歴史的な超過熱状態です。いつ急落してもおかしくないため厳重警戒が必要です。"
+    # ★ 状態ごとのテキスト定義
+    if idx == 0: status_desc = "相場は総悲観の底値圏です。絶好の買い場（仕込み時）が到来しています。"
+    elif idx == 1: status_desc = "売られ過ぎのサインが出ています。押し目買いを検討する好機です。"
+    elif idx == 2: status_desc = "やや売られ過ぎの傾向があります。自律反発に向けた準備期間です。"
+    elif idx == 3: status_desc = "売り買いの勢力が拮抗しており、相場はニュートラル（中立）な状態です。"
+    elif idx == 4: status_desc = "相場がやや強気です。新規の買いは少し慎重に行う時期です。"
+    elif idx == 5: status_desc = "相場は買われ過ぎ（天井圏）に達しています。利益確定売りを検討してください。"
+    else: status_desc = "歴史的な超過熱状態です。いつ急落してもおかしくないため厳重警戒が必要です。"
+
+    # ★ 豆知識を共通で追加
+    desc = f"{status_desc}\n\n💡 【豆知識：騰落レシオとは？】\n市場の「買われすぎ」「売られすぎ」を測る温度計のような指標です。100%が中立（売り買い互角）で、120%を超えると過熱による下落警戒、80%を割ると底値圏で反発のチャンスとされています。"
 
     title_structures = [
         {"type": "text", "text": f"現在値: 【 {latest_value}% 】", "weight": "bold", "size": "xl", "color": "#111111"},
@@ -802,9 +807,7 @@ def main():
     elif today_wd == 6:
         if not is_sunday_already_notified(now_jst):
             b_margin = get_margin_bubble()
-            b_fgi = get_fgi_bubble()
             if b_margin: bubbles.append(b_margin)
-            if b_fgi: bubbles.append(b_fgi)
         else:
             print("🟢 日曜通知：本日すでに通知済みのためスキップします。")
     elif now_hour == 8:
@@ -826,6 +829,13 @@ def main():
             if b_us_holiday: bubbles.append(b_us_holiday)
     elif now_hour >= 20:
         if not is_night_already_notified(now_jst):
+            
+            # 日本市場が開いている平日なら騰落レシオを追加（毎晩）
+            if not is_japanese_holiday(now_jst):
+                b_touraku = get_updown_ratio_bubble()
+                if b_touraku: bubbles.append(b_touraku)
+
+            # 米国市場が開いているなら各種US指標を追加
             if not is_us_holiday(now_jst):
                 b_fomc = get_fomc_bubble(now_jst)
                 b_gmo = get_gmo_bubble()
@@ -838,8 +848,8 @@ def main():
 
     # ★ 送信と状態記録
     if bubbles:
+        # 強制テスト時は重複通知を避けるため、状態の更新(mark_as_notified)は行いません。
         success = send_carousel_message(bubbles)
-        # テスト時（強制追加）は重複防止ロックをかけない
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
