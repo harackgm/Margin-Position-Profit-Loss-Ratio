@@ -14,7 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
-# ※テスト成功後に False へ変更してください。
+# ※確認成功後に False へ変更して本番移行してください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -290,59 +290,59 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 安定動作版：トレーダーズ・ウェブ（通信実績のあるドメイン）から騰落レシオを取得
+# ★ Refererヘッダー付き騰落レシオ取得関数
 def get_updown_ratio_bubble(force_test=False):
     latest_date = ""
     latest_value = None
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    
+    # サーバー負荷軽減のゆらぎスリープ（1〜3秒）
+    time.sleep(random.randint(1, 3))
 
-    # 第1方法: トレーダーズ・ウェブ (traders.co.jp)
+    # 第1方法: nikkei225jp JSON (Refererヘッダー必須設定)
     try:
-        url = "https://www.traders.co.jp/market_ratio"
-        res = requests.get(url, headers=headers, timeout=15)
-        print(f"🔍 騰落レシオ (traders.co.jp) HTTPステータス: {res.status_code}")
+        data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
+        headers_nikkei = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://nikkei225jp.com/data/touraku.php"
+        }
+        res = requests.get(data_url, headers=headers_nikkei, timeout=15)
+        print(f"🔍 騰落レシオ (nikkei225jp JSON) HTTPステータス: {res.status_code}")
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
-            for row in soup.find_all("tr"):
-                txt = row.get_text(" ", strip=True)
-                if "25日" in txt or "/" in txt:
-                    cells = row.find_all(["td", "th"])
-                    for cell in cells:
-                        val_txt = cell.get_text(strip=True).replace("%", "").replace(",", "")
-                        try:
-                            v = float(val_txt)
-                            if 50.0 <= v <= 200.0: # 騰落レシオとして適正な範囲
-                                latest_value = v
-                                date_match = re.search(r'\d{1,2}/\d{1,2}', txt)
-                                if date_match:
-                                    latest_date = date_match.group(0)
-                                break
-                        except ValueError:
-                            continue
-                if latest_value is not None:
-                    break
+            json_text = re.sub(r'^\s*var\s+\w+\s*=\s*', '', res.text.strip()).rstrip(';')
+            data = json.loads(json_text)
+            if isinstance(data, list) and len(data) >= 25:
+                up_sum = sum(item[5] for item in data[-25:])
+                down_sum = sum(item[6] for item in data[-25:])
+                if down_sum > 0:
+                    latest_value = round((up_sum / down_sum) * 100.0, 2)
+                    ts = data[-1][0] / 1000.0
+                    dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=9)))
+                    latest_date = dt.strftime('%Y-%m-%d')
     except Exception as e:
-        print(f"⚠️ トレーダーズ・ウェブ取得例外: {e}")
+        print(f"⚠️ nikkei225jp JSON取得例外: {e}")
 
-    # 第2方法: バックアップ (nikkei225jp JSON直通)
+    # 第2方法: 株探 (kabutan.jp) フォールバック
     if latest_value is None:
         try:
-            data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
-            res = requests.get(data_url, headers=headers, timeout=15)
-            print(f"🔍 騰落レシオ (nikkei225jp JSON) HTTPステータス: {res.status_code}")
-            if res.status_code == 200:
-                json_text = re.sub(r'^\s*var\s+\w+\s*=\s*', '', res.text.strip()).rstrip(';')
-                data = json.loads(json_text)
-                if isinstance(data, list) and len(data) >= 25:
-                    up_sum = sum(item[5] for item in data[-25:])
-                    down_sum = sum(item[6] for item in data[-25:])
-                    if down_sum > 0:
-                        latest_value = round((up_sum / down_sum) * 100.0, 2)
-                        ts = data[-1][0] / 1000.0
-                        dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=9)))
-                        latest_date = dt.strftime('%m/%d')
+            kabutan_url = "https://kabutan.jp/stock/touraku?bmark=1"
+            headers_kabutan = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://kabutan.jp/"
+            }
+            res_k = requests.get(kabutan_url, headers=headers_kabutan, timeout=15)
+            print(f"🔍 騰落レシオ (株探) HTTPステータス: {res_k.status_code}")
+            if res_k.status_code == 200:
+                soup = BeautifulSoup(res_k.text, "html.parser")
+                for row in soup.find_all("tr"):
+                    txt = row.get_text(" ", strip=True)
+                    m_date = re.search(r'(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}/\d{1,2})', txt)
+                    m_nums = re.findall(r'\b\d{2,3}\.\d{1,2}\b', txt)
+                    if m_date and m_nums:
+                        latest_date = m_date.group(1)
+                        latest_value = float(m_nums[0])
+                        break
         except Exception as e:
-            print(f"⚠️ JSON直通取得例外: {e}")
+            print(f"⚠️ 株探取得例外: {e}")
 
     if latest_value is None:
         print("⚠️ 騰落レシオの数値が全ソースから取得できませんでした。")
@@ -376,8 +376,8 @@ def get_updown_ratio_bubble(force_test=False):
 
     return create_flex_bubble(
         header, color, title, desc,
-        footer_text="🔗 ソース: トレーダーズ・ウェブ",
-        footer_url="https://www.traders.co.jp/market_ratio"
+        footer_text="🔗 ソース: 日経平均 株価 AI予想",
+        footer_url="https://nikkei225jp.com/data/touraku.php"
     )
 
 def get_anomaly_bubble(dt_jst):
@@ -523,8 +523,9 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
+    # ★ 大量通知ストッパー (MAX_LIMIT制御)
     if len(target_events) > 10:
-        print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため配信をスキップします。")
+        print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
 
     desc = (
@@ -675,6 +676,7 @@ def send_carousel_message(bubbles):
         print("❌ LINE_ACCESS_TOKEN が設定されていません。")
         return False
 
+    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(bubbles) > 10:
         print(f"⚠️ 大量通知ストッパー作動: バブル数が {len(bubbles)} 件のため送信を一時停止します。")
         return False
