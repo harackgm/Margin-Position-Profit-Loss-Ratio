@@ -242,7 +242,7 @@ def get_sq_bubble(dt_jst):
 def get_margin_bubble():
     try:
         url = "https://www.traders.co.jp/margin_derivatives/margin_transition"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+        headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, "html.parser")
         latest_date, latest_value = "", None
@@ -290,8 +290,7 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 毎晩配信用：騰落レシオ（凡例サイズ拡大）
-def get_updown_ratio_bubble(force_test=False):
+def get_updown_ratio_bubble(check_threshold=False):
     latest_date = ""
     latest_value = None
     time.sleep(random.randint(1, 3))
@@ -299,7 +298,7 @@ def get_updown_ratio_bubble(force_test=False):
     try:
         data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
         headers_nikkei = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0",
             "Referer": "https://nikkei225jp.com/data/touraku.php"
         }
         res = requests.get(data_url, headers=headers_nikkei, timeout=15)
@@ -333,15 +332,15 @@ def get_updown_ratio_bubble(force_test=False):
     if latest_value is None:
         return None
 
-    # 判定ロジック
-    jst = timezone(timedelta(hours=9))
-    is_sunday = (datetime.now(jst).weekday() == 6)
+    # 閾値判定
     is_overbought = (latest_value >= 120.0)
     is_oversold = (latest_value <= 80.0)
 
-    if not (is_sunday or is_overbought or is_oversold or force_test):
+    # 平日朝の呼び出し時など、閾値を超えた場合のみ通知したい場合のガード
+    if check_threshold and not (is_overbought or is_oversold):
         return None
 
+    # メーター判定
     idx = 0
     if latest_value < 70.0: idx = 0
     elif latest_value < 80.0: idx = 1
@@ -423,7 +422,6 @@ def get_updown_ratio_bubble(force_test=False):
         legend_boxes.append({
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
-                # ★ 凡例の文字サイズを sm に変更
                 {"type": "text", "text": color_label, "color": colors[i], "size": "sm", "weight": "bold", "flex": 0},
                 {"type": "text", "text": text_body, "color": "#111111", "size": "sm", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
             ]
@@ -438,7 +436,7 @@ def get_updown_ratio_bubble(force_test=False):
     ]
 
     return create_flex_bubble(
-        "📊 騰落レシオ25日", current_color, title_structures, desc,
+        "🇯🇵 騰落レシオ25日", current_color, title_structures, desc,
         footer_text="🔗 ソース: 日経平均 株価 AI予想",
         extra_contents=extra_contents,
         footer_url="https://nikkei225jp.com/data/touraku.php"
@@ -587,6 +585,7 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
+    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
@@ -602,11 +601,10 @@ def get_gmo_bubble():
         footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
     )
 
-# ★ Fear & Greed Index (凡例サイズ拡大)
 def get_fgi_bubble():
     score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         res = requests.get(api_url, headers=headers, timeout=15)
@@ -705,7 +703,6 @@ def get_fgi_bubble():
         legend_boxes.append({
             "type": "box", "layout": "horizontal", "margin": "xs",
             "contents": [
-                # ★ 凡例の文字サイズを sm に変更
                 {"type": "text", "text": color_label, "color": colors[i], "size": "sm", "weight": "bold", "flex": 0},
                 {"type": "text", "text": text_body, "color": "#111111", "size": "sm", "weight": "bold" if is_current else "regular", "flex": 1, "wrap": True}
             ]
@@ -726,7 +723,7 @@ def get_fgi_bubble():
     ]
 
     return create_flex_bubble(
-        "🧭 Fear & Greed Index", current_color, title_structures, desc,
+        "🇺🇸 Fear & Greed Index", current_color, title_structures, desc,
         footer_text="🔗 ソース: CNN Markets",
         extra_contents=extra_contents,
         footer_url="https://edition.cnn.com/markets/fear-and-greed"
@@ -789,12 +786,20 @@ def main():
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
 
     # ==========================================
-    # ★ テスト専用：時間帯や閾値を無視して「騰落レシオ」を強制追加
+    # ★ テスト専用：時間帯や閾値を無視して強制追加
     # ==========================================
-    print("🛠️ テストモード稼働中：騰落レシオを強制的に取得・追加します。")
-    b_touraku_test = get_updown_ratio_bubble(force_test=True)
-    if b_touraku_test:
-        bubbles.append(b_touraku_test)
+    if DEBUG_MODE:
+        print("🛠️ テストモード稼働中：国旗追加の表示確認を行います。")
+        b_touraku_test = get_updown_ratio_bubble(check_threshold=False)
+        b_fgi_test = get_fgi_bubble()
+        if b_touraku_test: bubbles.append(b_touraku_test)
+        if b_fgi_test: bubbles.append(b_fgi_test)
+        
+        if bubbles:
+            send_carousel_message(bubbles)
+        else:
+            print("エラー: テスト用バブルの生成に失敗しました。")
+        return
 
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
@@ -815,9 +820,11 @@ def main():
                 b_sq = get_sq_bubble(now_jst)
                 b_margin = get_margin_bubble()
                 b_anomaly = get_anomaly_bubble(now_jst)
+                b_touraku = get_updown_ratio_bubble(check_threshold=True)
                 if b_sq: bubbles.append(b_sq)
                 if b_margin: bubbles.append(b_margin)
                 if b_anomaly: bubbles.append(b_anomaly)
+                if b_touraku: bubbles.append(b_touraku)
         else:
             print("🟢 朝の通知：本日すでに通知済みのためスキップします。")
     elif 16 <= now_hour <= 19:
@@ -827,12 +834,10 @@ def main():
     elif now_hour >= 20:
         if not is_night_already_notified(now_jst):
             
-            # 日本市場が開いている平日なら騰落レシオを追加（毎晩）
             if not is_japanese_holiday(now_jst):
-                b_touraku = get_updown_ratio_bubble()
+                b_touraku = get_updown_ratio_bubble(check_threshold=False)
                 if b_touraku: bubbles.append(b_touraku)
 
-            # 米国市場が開いているなら各種US指標を追加
             if not is_us_holiday(now_jst):
                 b_fomc = get_fomc_bubble(now_jst)
                 b_gmo = get_gmo_bubble()
@@ -843,9 +848,18 @@ def main():
         else:
             print("🟢 夜の通知：本日すでに通知済みのためスキップします。")
 
-    # ★ 送信と状態記録
     if bubbles:
         success = send_carousel_message(bubbles)
+        if success:
+            if today_wd == 6:
+                mark_sunday_as_notified(now_jst)
+            elif now_hour == 8:
+                mark_morning_as_notified(now_jst)
+            elif 16 <= now_hour <= 19:
+                if any("米国市場 休場のお知らせ" in str(b) for b in bubbles):
+                    mark_us_holiday_as_notified(now_jst)
+            elif now_hour >= 20:
+                mark_night_as_notified(now_jst)
     else:
         print("🟢 本日は通知対象のイベント・更新はありませんでした。")
 
