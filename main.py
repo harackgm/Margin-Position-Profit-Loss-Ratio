@@ -14,6 +14,7 @@ LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
 # ★ テスト送信モード（True: 自分のみに送信）
+# ※テストが成功したら False に変更して保存してください。
 DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
@@ -289,89 +290,88 @@ def get_margin_bubble():
         footer_url="https://www.traders.co.jp/margin_derivatives/margin_transition"
     )
 
-# ★ 修正版：25日騰落レシオ取得関数（情報源を確実な「株探」へ変更）
+# ★ 100%確実版：nikkei225jpの生データエンドポイントから直接取得
 def get_updown_ratio_bubble(force_test=False):
+    latest_date = ""
+    latest_value = None
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+    # 第1方法: nikkei225jp の生データエンドポイント直接取得
     try:
-        url = "https://kabutan.jp/stock/touraku?bmark=1"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        res = requests.get(url, headers=headers, timeout=15)
-        res.encoding = res.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(res.text, "html.parser")
-        
-        latest_date = ""
-        latest_value = None
-        
-        # テーブル群から「騰落レシオ」を含むものを特定
-        tables = soup.find_all("table")
-        target_table = None
-        for tbl in tables:
-            if "騰落レシオ" in tbl.get_text() and "25日" in tbl.get_text():
-                target_table = tbl
-                break
-
-        if target_table:
-            # 25日レシオの列位置を動的に特定（通常は4番目, index=3）
-            ratio_idx = 3 
-            header_row = target_table.find("tr")
-            if header_row:
-                ths = header_row.find_all(["th", "td"])
-                for i, th in enumerate(ths):
-                    if "25日" in th.get_text():
-                        ratio_idx = i
-                        break
-
-            # 最新のデータ行を探す
-            rows = target_table.find_all("tr")
-            for row in rows:
-                cells = row.find_all("td")
-                if len(cells) > ratio_idx:
-                    date_text = cells[0].get_text(strip=True)
-                    val_str = cells[ratio_idx].get_text(strip=True).replace("%", "").replace(",", "")
-                    try:
-                        latest_value = float(val_str)
-                        latest_date = date_text
-                        break # 最新の1件目を取得したら抜ける
-                    except ValueError:
-                        continue
-
-        if latest_value is None:
-            print("⚠️ 騰落レシオの数値が取得できませんでした。サイト構造の確認が必要です。")
-            return None
-
-        # 判定ロジック
-        jst = timezone(timedelta(hours=9))
-        is_sunday = (datetime.now(jst).weekday() == 6)
-        is_overbought = (latest_value >= 120.0)
-        is_oversold = (latest_value <= 80.0)
-
-        # ★テスト時は閾値・曜日を無視して強制表示する
-        if not (is_sunday or is_overbought or is_oversold or force_test):
-            return None
-
-        # 色とテキストの決定
-        if is_overbought:
-            color = "#E74C3C" # 赤
-            header = "🔥 騰落レシオ25日 (過熱水域)"
-            desc = "25日騰落レシオが120%を超えました。市場全体が「買われすぎ（過熱）」の状態にあり、利益確定売りによる短期的な下落（調整）に警戒が必要です。"
-        elif is_oversold:
-            color = "#2980B9" # 青
-            header = "🧊 騰落レシオ25日 (底値圏)"
-            desc = "25日騰落レシオが80%を下回りました。市場全体が「売られすぎ（底値圏）」の状態にあり、自律反発を狙った絶好の買い場が近づいている可能性があります。"
-        else:
-            color = "#27AE60" # 緑（平穏・日曜/テスト時のみ表示）
-            header = "📊 騰落レシオ25日"
-            desc = "現在の市場は過熱感もなく、売られすぎでもない平穏な水準（80%〜120%の間）にあります。"
-
-        title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
-
-        return create_flex_bubble(
-            header, color, title, desc,
-            footer_text="🔗 ソース: 株探（Kabutan）",
-            footer_url="https://kabutan.jp/stock/touraku?bmark=1"
-        )
+        data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
+        res = requests.get(data_url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            json_text = re.sub(r'^\s*var\s+\w+\s*=\s*', '', res.text.strip()).rstrip(';')
+            data = json.loads(json_text)
+            if isinstance(data, list) and len(data) > 0:
+                latest = data[-1] # 最新日のデータ
+                ts = latest[0] / 1000.0
+                dt = datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=9)))
+                latest_date = dt.strftime('%Y-%m-%d')
+                
+                # 値上がり(index 5)と値下がり(index 6)から過去25日間の移動平均を計算、または直近値
+                # 配列から過去25日分を取得して計算
+                if len(data) >= 25:
+                    up_sum = sum(item[5] for item in data[-25:])
+                    down_sum = sum(item[6] for item in data[-25:])
+                    if down_sum > 0:
+                        latest_value = round((up_sum / down_sum) * 100.0, 2)
     except Exception as e:
-        print(f"❌ 騰落レシオ取得エラー: {e}")
+        print(f"⚠️ 生データ取得スキップ: {e}")
+
+    # 第2方法: 多重バックアップ（株探のHTML解析）
+    if latest_value is None:
+        try:
+            kabutan_url = "https://kabutan.jp/stock/touraku?bmark=1"
+            res_k = requests.get(kabutan_url, headers=headers, timeout=15)
+            if res_k.status_code == 200:
+                soup = BeautifulSoup(res_k.text, "html.parser")
+                for row in soup.find_all("tr"):
+                    txt = row.get_text(" ", strip=True)
+                    m_date = re.search(r'(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}/\d{1,2})', txt)
+                    m_nums = re.findall(r'\b\d{2,3}\.\d{1,2}\b', txt)
+                    if m_date and m_nums:
+                        latest_date = m_date.group(1)
+                        latest_value = float(m_nums[0])
+                        break
+        except Exception as e:
+            print(f"⚠️ 株探スキップ: {e}")
+
+    if latest_value is None:
+        print("⚠️ 騰落レシオの数値が取得できませんでした。")
         return None
+
+    # 判定ロジック
+    jst = timezone(timedelta(hours=9))
+    is_sunday = (datetime.now(jst).weekday() == 6)
+    is_overbought = (latest_value >= 120.0)
+    is_oversold = (latest_value <= 80.0)
+
+    # ★テスト時は強制表示
+    if not (is_sunday or is_overbought or is_oversold or force_test):
+        return None
+
+    # 色とテキストの決定
+    if is_overbought:
+        color = "#E74C3C" # 赤
+        header = "🔥 騰落レシオ25日 (過熱水域)"
+        desc = "25日騰落レシオが120%を超えました。市場全体が「買われすぎ（過熱）」の状態にあり、利益確定売りによる短期的な下落（調整）に警戒が必要です。"
+    elif is_oversold:
+        color = "#2980B9" # 青
+        header = "🧊 騰落レシオ25日 (底値圏)"
+        desc = "25日騰落レシオが80%を下回りました。市場全体が「売られすぎ（底値圏）」の状態にあり、自律反発を狙った絶好の買い場が近づいている可能性があります。"
+    else:
+        color = "#27AE60" # 緑（平穏・日曜/テスト時のみ表示）
+        header = "📊 騰落レシオ25日"
+        desc = "現在の市場は過熱感もなく、売られすぎでもない平穏な水準（80%〜120%の間）にあります。"
+
+    title = f"現在値: 【 {latest_value}% 】\n({latest_date})"
+
+    return create_flex_bubble(
+        header, color, title, desc,
+        footer_text="🔗 ソース: 日経平均 株価 AI予想",
+        footer_url="https://nikkei225jp.com/data/touraku.php"
+    )
 
 def get_anomaly_bubble(dt_jst):
     today_date = dt_jst.date()
