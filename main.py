@@ -13,8 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト送信モード（True: 自分のみに送信）
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -297,7 +297,8 @@ def get_updown_ratio_bubble(check_threshold=False):
     try:
         data_url = "https://nikkei225jp.com/_data/_nfsDATA/DAY/daily2year.json"
         headers_nikkei = {
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
             "Referer": "https://nikkei225jp.com/data/touraku.php"
         }
         res = requests.get(data_url, headers=headers_nikkei, timeout=15)
@@ -583,7 +584,6 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
-    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
@@ -599,10 +599,10 @@ def get_gmo_bubble():
         footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
     )
 
-# ★ FGI（偽装強化と詳細ログ、国旗とアイコン追加）
 def get_fgi_bubble():
     score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -611,7 +611,6 @@ def get_fgi_bubble():
 
     try:
         res = requests.get(api_url, headers=headers, timeout=15)
-        print(f"🔍 FGI API HTTPステータス: {res.status_code}")
         if res.status_code == 200:
             data = res.json()
             score = int(round(data.get("fear_and_greed", {}).get("score", 0)))
@@ -622,15 +621,14 @@ def get_fgi_bubble():
         try:
             web_url = "https://edition.cnn.com/markets/fear-and-greed"
             res = requests.get(web_url, headers=headers, timeout=15)
-            print(f"🔍 FGI Web HTTPステータス: {res.status_code}")
-            match = re.search(r'"score":\s*([\d\.]+)', res.text)
-            if match:
-                score = int(round(float(match.group(1))))
-        except Exception as e: 
+            if res.status_code == 200:
+                match = re.search(r'"score":\s*([\d\.]+)', res.text)
+                if match:
+                    score = int(round(float(match.group(1))))
+        except Exception as e:
             print(f"❌ Fear & Greed Web取得エラー: {e}")
 
     if score is None:
-        print("⚠️ Fear & Greed Indexの数値が取得できませんでした。")
         return None
 
     idx = 0
@@ -792,23 +790,6 @@ def main():
     bubbles = []
 
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
-
-    # ==========================================
-    # ★ テスト専用：時間帯や閾値を無視して強制追加
-    # ==========================================
-    if DEBUG_MODE:
-        print("🛠️ テストモード稼働中：強制取得・追加します。")
-        b_touraku_test = get_updown_ratio_bubble(check_threshold=False)
-        b_fgi_test = get_fgi_bubble()
-        
-        if b_touraku_test: bubbles.append(b_touraku_test)
-        if b_fgi_test: bubbles.append(b_fgi_test)
-        
-        if bubbles:
-            send_carousel_message(bubbles)
-        else:
-            print("エラー: テスト用バブルの生成に失敗しました。")
-        return
 
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
