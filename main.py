@@ -13,8 +13,9 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
-DEBUG_MODE = False 
+# ★ テスト送信モード（True: 自分のみに送信）
+# ※機能の表示確認用です。
+DEBUG_MODE = True 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -332,14 +333,12 @@ def get_updown_ratio_bubble(check_threshold=False):
     if latest_value is None:
         return None
 
-    # 閾値判定
     is_overbought = (latest_value >= 120.0)
     is_oversold = (latest_value <= 80.0)
 
     if check_threshold and not (is_overbought or is_oversold):
         return None
 
-    # メーター判定
     idx = 0
     if latest_value < 70.0: idx = 0
     elif latest_value < 80.0: idx = 1
@@ -599,6 +598,109 @@ def get_gmo_bubble():
         footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
     )
 
+# ★ 新機能：週間（来週）の米国★★★指標を取得する関数
+def get_weekly_gmo_bubble(dt_jst):
+    try:
+        gaikaex_url = "https://www.gaikaex.com/gaikaex/mark/calendar/"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(gaikaex_url, headers=headers, timeout=15)
+        res.encoding = res.apparent_encoding or "utf-8"
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        # 直近1週間（明日から7日間）の日付パターンを作成
+        target_dates = []
+        date_map = {}
+        for i in range(0, 8):
+            d = dt_jst + timedelta(days=i)
+            m_str, d_str = str(d.month), str(d.day)
+            m_z, d_z = f"{d.month:02d}", f"{d.day:02d}"
+            patterns = [f"{m_str}/{d_str}", f"{m_z}/{d_z}", f"{m_str}月{d_str}日", f"{m_z}月{d_z}日"]
+            target_dates.extend(patterns)
+            date_key = f"{d.month}/{d.day} ({'月火水木金土日'[d.weekday()]})"
+            for p in patterns:
+                date_map[p] = date_key
+
+        weekly_events = {}
+        current_date_key = None
+
+        for row in soup.find_all("tr"):
+            row_text = row.get_text(" ", strip=True)
+            row_html = str(row)
+
+            # 行のテキストから日付を検知
+            found_date = False
+            for pat in date_map.keys():
+                if pat in row_text:
+                    current_date_key = date_map[pat]
+                    found_date = True
+                    break
+
+            # 日付行だがターゲット期間外の場合はスキップフラグを立てる
+            if not found_date and any(re.search(r"\d{1,2}/\d{1,2}|\d{1,2}月\d{1,2}日", row_text) for _ in [1]):
+                current_date_key = None
+
+            if not current_date_key:
+                continue
+
+            # 米国指標かチェック
+            is_us = "アメリカ" in row_text or "米国" in row_text
+            if not is_us:
+                for img in row.find_all("img"):
+                    alt = (img.get("alt", "") + img.get("title", "") + img.get("src", "")).lower()
+                    if "アメリカ" in alt or "米国" in alt or "us" in alt:
+                        is_us = True; break
+            if not is_us: continue
+
+            # 重要度★★★かチェック
+            is_star3 = ("★★★" in row_text or "★3" in row_text or 
+                        re.search(r"star[_-]?3|rank[_-]?3|level[_-]?3", row_html, re.I) or row_html.count("star") >= 3)
+
+            if is_star3:
+                time_match = re.search(r"\d{2}:\d{2}", row_text)
+                time_str = time_match.group(0) if time_match else "時間未定"
+                name_str = ""
+                link_elem = row.find("a")
+                if link_elem and len(link_elem.get_text(strip=True)) > 2:
+                    name_str = link_elem.get_text(strip=True)
+                else:
+                    for td in row.find_all("td"):
+                        txt = td.get_text(strip=True)
+                        if len(txt) > 3 and not txt.endswith("%") and ":" not in txt and "アメリカ" not in txt:
+                            name_str = txt; break
+                if name_str:
+                    evt = f"⏰ {time_str} | {name_str}"
+                    if current_date_key not in weekly_events:
+                        weekly_events[current_date_key] = []
+                    if evt not in weekly_events[current_date_key]:
+                        weekly_events[current_date_key].append(evt)
+
+    except Exception as e:
+        print(f"❌ 週間GMO指標取得エラー: {e}")
+        return None
+
+    if not weekly_events: return None
+
+    desc_lines = ["来週発表予定の重要度★★★（最重要）指標です：\n"]
+    total_events = 0
+    for date_key, evts in weekly_events.items():
+        desc_lines.append(f"📅 【{date_key}】")
+        for e in evts:
+            desc_lines.append(f" {e}")
+            total_events += 1
+        desc_lines.append("")
+
+    if total_events > 20:
+        print(f"⚠️ 週間指標が {total_events} 件のため多すぎます。省略等は未実装のためそのまま進行します。")
+
+    desc = "\n".join(desc_lines).strip()
+    desc += "\n\n💡 指標発表の前後数分間は、為替・先物市場でスプレッドが拡大し突発的な値動きが起きやすくなります。"
+
+    return create_flex_bubble(
+        "🇺🇸 来週の★★★重要指標", "#D35400", "来週の注目経済指標", desc,
+        footer_text="🔗 ソース: GMO外貨 カレンダー",
+        footer_url="https://www.gaikaex.com/gaikaex/mark/calendar/"
+    )
+
 def get_fgi_bubble():
     score = None
     api_url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
@@ -791,6 +893,20 @@ def main():
 
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
 
+    # ==========================================
+    # ★ テスト専用：週間指標を強制テスト表示
+    # ==========================================
+    if DEBUG_MODE:
+        print("🛠️ テストモード稼働中：週間指標追加の表示確認を行います。")
+        b_weekly = get_weekly_gmo_bubble(now_jst)
+        if b_weekly: bubbles.append(b_weekly)
+        
+        if bubbles:
+            send_carousel_message(bubbles)
+        else:
+            print("エラー: 週間指標データが見つかりません。")
+        return
+
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
 
@@ -800,6 +916,10 @@ def main():
         if not is_sunday_already_notified(now_jst):
             b_margin = get_margin_bubble()
             if b_margin: bubbles.append(b_margin)
+            
+            # ★ 新機能: 日曜日に来週分の指標を追加
+            b_weekly = get_weekly_gmo_bubble(now_jst)
+            if b_weekly: bubbles.append(b_weekly)
         else:
             print("🟢 日曜通知：本日すでに通知済みのためスキップします。")
     elif now_hour == 8:
