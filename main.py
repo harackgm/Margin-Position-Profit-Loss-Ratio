@@ -13,9 +13,8 @@ import json
 LINE_ACCESS_TOKEN = os.environ.get("LINE_ACCESS_TOKEN")
 LINE_USER_ID = os.environ.get("LINE_USER_ID")
 
-# ★ テスト送信モード（True: 自分のみに送信）
-# ※機能の表示確認用です。
-DEBUG_MODE = True 
+# ★ 本番運用モード（False: 登録者全員へ一斉ブロードキャスト送信）
+DEBUG_MODE = False 
 
 THRES_DANGER = -10.0
 THRES_RECOVERY = 0.0
@@ -327,18 +326,22 @@ def get_updown_ratio_bubble(check_threshold=False):
                     last_ts = recent_25[-1][0]
                     dt = datetime.fromtimestamp(last_ts, tz=timezone(timedelta(hours=9)))
                     latest_date = dt.strftime('%Y-%m-%d')
+        else:
+            print(f"⚠️ 騰落レシオ HTTPステータス: {res.status_code}")
     except Exception as e:
         print(f"⚠️ 騰落レシオ解析例外: {e}")
 
     if latest_value is None:
         return None
 
+    # 閾値判定
     is_overbought = (latest_value >= 120.0)
     is_oversold = (latest_value <= 80.0)
 
     if check_threshold and not (is_overbought or is_oversold):
         return None
 
+    # メーター判定
     idx = 0
     if latest_value < 70.0: idx = 0
     elif latest_value < 80.0: idx = 1
@@ -583,6 +586,7 @@ def get_gmo_bubble():
 
     if not target_events: return None
 
+    # ★ 大量通知ストッパー (MAX_LIMIT制御: 最大10件)
     if len(target_events) > 10:
         print(f"⚠️ 大量通知ストッパー作動: 指標が {len(target_events)} 件のため送信を一時停止します。")
         return None
@@ -892,20 +896,6 @@ def main():
     bubbles = []
 
     print(f"🤖 チェック開始... (JST: {now_jst.strftime('%Y/%m/%d %H:%M')} / DEBUG_MODE={DEBUG_MODE})")
-
-    # ==========================================
-    # ★ テスト専用：週間指標を強制テスト表示
-    # ==========================================
-    if DEBUG_MODE:
-        print("🛠️ テストモード稼働中：週間指標追加の表示確認を行います。")
-        b_weekly = get_weekly_gmo_bubble(now_jst)
-        if b_weekly: bubbles.append(b_weekly)
-        
-        if bubbles:
-            send_carousel_message(bubbles)
-        else:
-            print("エラー: 週間指標データが見つかりません。")
-        return
 
     today_wd = now_jst.weekday()
     now_hour = now_jst.hour
